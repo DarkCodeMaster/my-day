@@ -45,13 +45,11 @@ jobs:
 
       - name: Use remote animal-island-vue in CI
         working-directory: MyDay
-        run: |
-          npm pkg set dependencies.animal-island-vue="github:DarkCodeMaster/animal-island-vue#main"
-          rm -f package-lock.json
+        run: npm pkg set dependencies.animal-island-vue="github:DarkCodeMaster/animal-island-vue#main"
 
       - name: Install dependencies
         working-directory: MyDay
-        run: npm install
+        run: npm install --no-package-lock
 
       - name: Build Electron app
         working-directory: MyDay
