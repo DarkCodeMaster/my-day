@@ -27,21 +27,36 @@ export interface MoneyItem {
   deadline: string;
   progress: number;
   status: 'pending' | 'done' | 'paused';
+  description?: string;
 }
 
 export interface TodayLog {
   date: string;
   time: string;
-  category: 'health' | 'study' | 'money';
+  category: 'health' | 'study' | 'money' | 'inspiration';
   content: string;
+}
+
+export interface TaskItem {
+  id: number;
+  title: string;
+  description?: string;
+  status: 'today' | 'todo' | 'doing' | 'done';
+  deadline?: string;
+  timeSlot?: 'dawn' | 'morning' | 'afternoon' | 'evening';
+  completedAt?: string;
+  linkType?: 'study' | 'money' | null;
+  linkId?: number;
 }
 
 export interface MyDayState {
   version: number;
   activeTab: string;
   chartRange: string;
+  moneyPlan?: string;
   weights: WeightRecord[];
   studyItems: StudyItem[];
   moneyItems: MoneyItem[];
   todayLogs: TodayLog[];
+  tasks: TaskItem[];
 }

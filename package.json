@@ -15,7 +15,9 @@
     "electron:preview": "npm run build && electron ."
   },
   "dependencies": {
+    "@vueup/vue-quill": "^1.5.5",
     "animal-island-vue": "file:../animal-island-vue",
+    "echarts": "^6.1.0",
     "vue": "^3.5.13"
   },
   "devDependencies": {
@@ -47,7 +49,9 @@
     "mac": {
       "target": {
         "target": "dmg",
-        "arch": ["arm64"]
+        "arch": [
+          "arm64"
+        ]
       }
     },
     "publish": null

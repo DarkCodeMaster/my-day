@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue';
 import {
   Button,
   Input,
@@ -26,9 +26,20 @@ import {
   NotificationContainer,
 } from 'animal-island-vue';
 import type { SelectOption, RadioOption } from 'animal-island-vue';
+import { QuillEditor } from '@vueup/vue-quill';
+import '@vueup/vue-quill/dist/vue-quill.snow.css';
+import { use } from 'echarts/core';
+import { init } from 'echarts/core';
+import { CanvasRenderer } from 'echarts/renderers';
+import { PieChart } from 'echarts/charts';
+import { TooltipComponent, LegendComponent, TitleComponent } from 'echarts/components';
+import { LabelLayout } from 'echarts/features';
 import { useMyDayStorage } from '@/composables/useMyDayStorage';
 import { todayStr, formatDateStr } from '@/utils/date';
-import type { StudyItem, MoneyItem, WeightRecord } from '@/types';
+import type { StudyItem, MoneyItem, WeightRecord, TaskItem } from '@/types';
+import DatePickerModal from '@/components/DatePickerModal.vue';
+
+use([CanvasRenderer, PieChart, TooltipComponent, LegendComponent, TitleComponent, LabelLayout]);
 
 const {
   activeTab,
@@ -36,7 +47,9 @@ const {
   weights,
   studyItems,
   moneyItems,
+  moneyPlan,
   todayLogs,
+  tasks,
   isLoaded,
 } = useMyDayStorage();
 
@@ -47,12 +60,286 @@ onMounted(() => {
 
 /* ==================== Tabs ==================== */
 const tabItems = [
+  { key: 'tasks', label: '任务' },
   { key: 'health', label: '健康' },
   { key: 'study', label: '学习' },
   { key: 'money', label: '赚钱' },
-  { key: 'today', label: '今日动态' },
-  { key: 'import-export', label: '导入导出' },
+  { key: 'today', label: '动态' },
+  { key: 'inspiration', label: '灵感' },
+  { key: 'import-export', label: '备份' },
 ];
+
+/* ==================== Tasks (Kanban) ==================== */
+const taskColumns = [
+  { key: 'today', label: '今日任务', color: 'app-red' },
+  { key: 'todo', label: '待开始', color: 'app-yellow' },
+  { key: 'doing', label: '进行中', color: 'app-blue' },
+  { key: 'done', label: '已完成', color: 'app-green' },
+] as const;
+
+const taskTimeSlotOptions = [
+  { key: 'dawn', label: '凌晨（00:00-06:00）' },
+  { key: 'morning', label: '上午（06:00-12:00）' },
+  { key: 'afternoon', label: '下午（12:00-18:00）' },
+  { key: 'evening', label: '晚上（18:00-24:00）' },
+];
+const getCurrentTimeSlot = (): NonNullable<TaskItem['timeSlot']> => {
+  const hour = new Date().getHours();
+  if (hour < 6) return 'dawn';
+  if (hour < 12) return 'morning';
+  if (hour < 18) return 'afternoon';
+  return 'evening';
+};
+const getTaskTimeSlotLabel = (key?: TaskItem['timeSlot']) =>
+  taskTimeSlotOptions.find((o) => o.key === key)?.label || '';
+const getTaskTimeSlot = (task: TaskItem): NonNullable<TaskItem['timeSlot']> => {
+  if (task.timeSlot) return task.timeSlot;
+  const hour = new Date(task.id).getHours();
+  if (hour < 6) return 'dawn';
+  if (hour < 12) return 'morning';
+  if (hour < 18) return 'afternoon';
+  return 'evening';
+};
+
+const taskForm = reactive({
+  title: '',
+  description: '',
+  deadline: '',
+  timeSlot: 'morning',
+  linkKey: 'none',
+});
+const resetTaskForm = () => {
+  taskForm.title = '';
+  taskForm.description = '';
+  taskForm.deadline = '';
+  taskForm.timeSlot = getCurrentTimeSlot();
+  taskForm.linkKey = 'none';
+};
+
+const taskLinkOptions = computed(() => {
+  const options: { key: string; label: string }[] = [{ key: 'none', label: '无关联' }];
+  studyItems.forEach((s: StudyItem) => options.push({ key: `study-${s.id}`, label: `学习：${s.name}` }));
+  moneyItems.forEach((m: MoneyItem) => options.push({ key: `money-${m.id}`, label: `赚钱：${m.desc}` }));
+  return options;
+});
+
+const parseTaskLink = (key: string) => {
+  if (key === 'none') return { linkType: undefined as 'study' | 'money' | undefined, linkId: undefined as number | undefined };
+  const [type, id] = key.split('-');
+  return { linkType: type as 'study' | 'money', linkId: Number(id) };
+};
+
+const formatTaskLink = (linkType?: 'study' | 'money' | null, linkId?: number) => {
+  if (!linkType || linkId == null) return 'none';
+  return `${linkType}-${linkId}`;
+};
+
+const findTaskLinkLabel = (linkType?: 'study' | 'money' | null, linkId?: number) => {
+  if (!linkType || linkId == null) return '';
+  if (linkType === 'study') {
+    const item = studyItems.find((s: StudyItem) => s.id === linkId);
+    return item ? `学习：${item.name}` : '';
+  }
+  const item = moneyItems.find((m: MoneyItem) => m.id === linkId);
+  return item ? `赚钱：${item.desc}` : '';
+};
+
+const taskModalOpen = ref(false);
+const taskModalMode = ref<'add' | 'edit'>('add');
+const taskEditTarget = ref<TaskItem | null>(null);
+const openTaskModal = () => {
+  resetTaskForm();
+  taskModalMode.value = 'add';
+  taskEditTarget.value = null;
+  taskModalOpen.value = true;
+};
+const isDeadlineWithinDays = (deadline: string | undefined, days: number) => {
+  if (!deadline) return false;
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+  end.setDate(end.getDate() + days);
+  const d = new Date(deadline + 'T00:00:00');
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return d.getTime() >= today.getTime() && d.getTime() <= end.getTime();
+};
+
+const openEditTask = (task: TaskItem) => {
+  taskEditTarget.value = task;
+  taskForm.title = task.title;
+  taskForm.description = task.description || '';
+  taskForm.deadline = task.deadline || '';
+  taskForm.timeSlot = task.timeSlot || getCurrentTimeSlot() || 'morning';
+  taskForm.linkKey = formatTaskLink(task.linkType, task.linkId);
+  taskModalMode.value = 'edit';
+  taskModalOpen.value = true;
+};
+const submitTask = () => {
+  const title = taskForm.title.trim();
+  if (!title) return;
+  const { linkType, linkId } = parseTaskLink(taskForm.linkKey);
+  const deadline = taskForm.deadline || undefined;
+  const timeSlot = taskForm.timeSlot as TaskItem['timeSlot'];
+  const status: TaskItem['status'] = deadline && isDeadlineWithinDays(deadline, 3) ? 'today' : 'todo';
+  if (taskModalMode.value === 'edit' && taskEditTarget.value) {
+    const task = taskEditTarget.value;
+    task.title = title;
+    task.description = taskForm.description.trim();
+    task.deadline = deadline;
+    task.timeSlot = timeSlot;
+    task.status = status;
+    task.linkType = linkType;
+    task.linkId = linkId;
+  } else {
+    tasks.push({
+      id: Date.now(),
+      title,
+      description: taskForm.description.trim(),
+      deadline,
+      timeSlot,
+      status,
+      linkType,
+      linkId,
+    });
+  }
+  resetTaskForm();
+  taskModalOpen.value = false;
+};
+const deleteTask = (task: TaskItem) => {
+  const idx = tasks.findIndex((t: TaskItem) => t.id === task.id);
+  if (idx > -1) tasks.splice(idx, 1);
+};
+const openTaskLink = (task: TaskItem) => {
+  if (task.linkType === 'study') {
+    const item = studyItems.find((s: StudyItem) => s.id === task.linkId);
+    if (item) openDetail(item);
+  } else if (task.linkType === 'money') {
+    const item = moneyItems.find((m: MoneyItem) => m.id === task.linkId);
+    if (item) openMoneyDetail(item);
+  }
+};
+
+const draggingTaskId = ref<number | null>(null);
+const handleDragStart = (task: TaskItem) => {
+  draggingTaskId.value = task.id;
+};
+const handleDragEnd = () => {
+  draggingTaskId.value = null;
+};
+const handleDrop = (status: 'today' | 'todo' | 'doing' | 'done') => {
+  if (draggingTaskId.value == null) return;
+  const task = tasks.find((t: TaskItem) => t.id === draggingTaskId.value);
+  if (task) {
+    task.status = status;
+    if (status === 'done') {
+      task.completedAt = new Date().toISOString();
+    } else {
+      task.completedAt = undefined;
+    }
+  }
+  draggingTaskId.value = null;
+};
+
+const taskPeriods = [
+  { key: 'dawn', label: '凌晨', start: 0, end: 6, color: '#889df0' },
+  { key: 'morning', label: '上午', start: 6, end: 12, color: '#f7cd67' },
+  { key: 'afternoon', label: '下午', start: 12, end: 18, color: '#82d5bb' },
+  { key: 'evening', label: '晚上', start: 18, end: 24, color: '#b77dee' },
+];
+const taskChartOpen = ref(false);
+const taskChartSelectedPeriod = ref<string | null>(null);
+const taskChartRef = ref<HTMLDivElement | null>(null);
+let taskChartInstance: any = null;
+let taskChartResizeObserver: ResizeObserver | null = null;
+
+const todayTasks = computed(() => tasks.filter((t: TaskItem) => t.status === 'today'));
+const taskChartData = computed(() =>
+  taskPeriods
+    .map((period) => {
+      const value = todayTasks.value.filter(
+        (t: TaskItem) => getTaskTimeSlot(t) === period.key
+      ).length;
+      return {
+        value,
+        name: period.label,
+        key: period.key,
+        itemStyle: { color: period.color },
+      };
+    })
+    .filter((d) => d.value > 0)
+);
+const taskChartOption = computed(() => ({
+  tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+  legend: { bottom: '0%', left: 'center' },
+  series: [
+    {
+      name: '任务时段',
+      type: 'pie',
+      radius: ['40%', '70%'],
+      center: ['50%', '45%'],
+      avoidLabelOverlap: false,
+      itemStyle: { borderRadius: 10, borderColor: '#fff', borderWidth: 2 },
+      label: { show: true, formatter: '{b}\n{c}' },
+      emphasis: { label: { show: true, fontSize: 16, fontWeight: 'bold' } },
+      data: taskChartData.value,
+    },
+  ],
+}));
+const selectedPeriodTasks = computed(() => {
+  if (!taskChartSelectedPeriod.value) return [];
+  const period = taskPeriods.find((p) => p.key === taskChartSelectedPeriod.value);
+  if (!period) return [];
+  return todayTasks.value.filter((t: TaskItem) => getTaskTimeSlot(t) === period.key);
+});
+const handleTaskChartClick = (params: any) => {
+  const period = taskPeriods.find((p) => p.label === params.name);
+  if (period) taskChartSelectedPeriod.value = period.key;
+};
+
+watch(taskChartOpen, (open) => {
+  if (open) {
+    taskChartSelectedPeriod.value = null;
+    nextTick(() => {
+      if (!taskChartRef.value) return;
+      taskChartResizeObserver = new ResizeObserver((entries) => {
+        const { width, height } = entries[0].contentRect;
+        if (width === 0 || height === 0) return;
+        if (!taskChartInstance) {
+          taskChartInstance = init(taskChartRef.value);
+          taskChartInstance.setOption(taskChartOption.value);
+          taskChartInstance.on('click', handleTaskChartClick);
+        } else {
+          taskChartInstance.resize();
+        }
+      });
+      taskChartResizeObserver.observe(taskChartRef.value);
+      // 兜底：Modal 动画 300ms 后如果还没初始化，再试一次
+      setTimeout(() => {
+        if (taskChartInstance || !taskChartRef.value) return;
+        const rect = taskChartRef.value.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          taskChartInstance = init(taskChartRef.value);
+          taskChartInstance.setOption(taskChartOption.value);
+          taskChartInstance.on('click', handleTaskChartClick);
+        }
+      }, 350);
+    });
+  } else {
+    if (taskChartResizeObserver) {
+      taskChartResizeObserver.disconnect();
+      taskChartResizeObserver = null;
+    }
+    if (taskChartInstance) {
+      taskChartInstance.dispose();
+      taskChartInstance = null;
+    }
+  }
+});
+watch(taskChartOption, (option) => {
+  if (taskChartInstance) {
+    taskChartInstance.setOption(option, true);
+  }
+});
 
 /* ==================== Health ==================== */
 const newWeightDate = ref(todayStr());
@@ -239,6 +526,40 @@ const filteredStudy = computed(() => {
   }
   return list;
 });
+const studyPage = ref(1);
+const studyPageSize = 10;
+const studyTotalPages = computed(() => Math.ceil(filteredStudy.value.length / studyPageSize) || 1);
+const paginatedStudy = computed(() => {
+  const start = (studyPage.value - 1) * studyPageSize;
+  return filteredStudy.value.slice(start, start + studyPageSize);
+});
+watch([studyType, showCompletedStudy], () => { studyPage.value = 1; });
+watch(studyTotalPages, (total) => { if (studyPage.value > total) studyPage.value = total || 1; });
+
+const draggingStudyId = ref<number | null>(null);
+const dragOverStudyId = ref<number | null>(null);
+const handleStudyDragStart = (record: StudyItem) => {
+  draggingStudyId.value = record.id;
+};
+const handleStudyDragOver = (record: StudyItem) => {
+  dragOverStudyId.value = record.id;
+};
+const handleStudyDrop = (targetRecord: StudyItem) => {
+  if (draggingStudyId.value == null) return;
+  const fromItem = paginatedStudy.value.find((s: StudyItem) => s.id === draggingStudyId.value);
+  if (!fromItem || fromItem.id === targetRecord.id) return;
+  const fromGlobal = studyItems.findIndex((s: StudyItem) => s.id === fromItem.id);
+  const toGlobal = studyItems.findIndex((s: StudyItem) => s.id === targetRecord.id);
+  if (fromGlobal === -1 || toGlobal === -1) return;
+  const [moved] = studyItems.splice(fromGlobal, 1);
+  studyItems.splice(toGlobal, 0, moved);
+  draggingStudyId.value = null;
+  dragOverStudyId.value = null;
+};
+const handleStudyDragEnd = () => {
+  draggingStudyId.value = null;
+  dragOverStudyId.value = null;
+};
 const addStudy = () => {
   const name = studyForm.name.trim();
   if (!name) return;
@@ -353,65 +674,75 @@ const moneyForm = reactive({
   deadline: '',
   status: 'pending',
   progress: '',
+  description: '',
 });
 const resetMoneyForm = () => {
   moneyForm.desc = '';
   moneyForm.amount = '';
-  moneyForm.deadline = '';
+  moneyForm.deadline = todayStr();
   moneyForm.status = 'pending';
   moneyForm.progress = '';
-};
-
-const moneyDeadlineError = ref('');
-const editMoneyDeadlineError = ref('');
-
-const isValidDateYYYYMMDD = (s: string) => {
-  if (!s) return false;
-  if (/^\d{8}$/.test(s)) {
-    const y = parseInt(s.slice(0, 4), 10);
-    const m = parseInt(s.slice(4, 6), 10);
-    const d = parseInt(s.slice(6, 8), 10);
-    const date = new Date(y, m - 1, d);
-    return date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d;
-  }
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-    const [y, m, d] = s.split('-').map(Number);
-    const date = new Date(y, m - 1, d);
-    return date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d;
-  }
-  return false;
-};
-
-const normalizeDate = (s: string) => {
-  if (/^\d{8}$/.test(s)) {
-    return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
-  }
-  return s;
+  moneyForm.description = '';
 };
 
 const moneyModalOpen = ref(false);
 const openMoneyModal = () => {
   resetMoneyForm();
-  moneyDeadlineError.value = '';
   moneyModalOpen.value = true;
 };
+const autoCreateTodayTaskFromMoney = (money: MoneyItem) => {
+  if (!isDeadlineWithinDays(money.deadline, 3)) return;
+  const exists = tasks.some(
+    (t: TaskItem) => t.linkType === 'money' && t.linkId === money.id
+  );
+  if (exists) return;
+  tasks.push({
+    id: Date.now(),
+    title: `[赚钱] ${money.desc}`,
+    deadline: money.deadline,
+    timeSlot: getCurrentTimeSlot(),
+    status: 'today',
+    linkType: 'money',
+    linkId: money.id,
+  });
+};
+const syncAutoTodayTaskForMoney = (money: MoneyItem) => {
+  const existing = tasks.find(
+    (t: TaskItem) => t.linkType === 'money' && t.linkId === money.id
+  );
+  if (isDeadlineWithinDays(money.deadline, 3)) {
+    if (existing) {
+      existing.deadline = money.deadline;
+      if (existing.status !== 'today') existing.status = 'today';
+    } else {
+      tasks.push({
+        id: Date.now(),
+        title: `[赚钱] ${money.desc}`,
+        deadline: money.deadline,
+        status: 'today',
+        linkType: 'money',
+        linkId: money.id,
+      });
+    }
+  } else if (existing) {
+    const idx = tasks.indexOf(existing);
+    if (idx > -1) tasks.splice(idx, 1);
+  }
+};
+
 const submitMoney = () => {
   if (!moneyForm.desc || !moneyForm.amount) return;
-  moneyDeadlineError.value = '';
-  const deadline = moneyForm.deadline.trim();
-  if (deadline && !isValidDateYYYYMMDD(deadline)) {
-    moneyDeadlineError.value = '日期格式无效，请使用 YYYYMMDD 或 YYYY-MM-DD';
-    return;
-  }
   const item: MoneyItem = {
     id: Date.now(),
     desc: moneyForm.desc,
     amount: Number(moneyForm.amount),
-    deadline: normalizeDate(deadline) || todayStr(),
+    deadline: moneyForm.deadline || todayStr(),
     progress: Math.min(100, Math.max(0, Number(moneyForm.progress) || 0)),
     status: moneyForm.status as MoneyItem['status'],
+    description: moneyForm.description,
   };
   moneyItems.push(item);
+  autoCreateTodayTaskFromMoney(item);
   resetMoneyForm();
   moneyModalOpen.value = false;
   pushTodayLog('money', `添加赚钱任务 ${item.desc} ¥${item.amount}，${statusText(item.status)}`);
@@ -424,6 +755,7 @@ const editMoneyForm = reactive({
   deadline: '',
   status: 'pending',
   progress: '',
+  description: '',
 });
 const openEditMoney = (record: MoneyItem) => {
   editMoneyTarget.value = record;
@@ -432,26 +764,110 @@ const openEditMoney = (record: MoneyItem) => {
   editMoneyForm.deadline = record.deadline;
   editMoneyForm.status = record.status;
   editMoneyForm.progress = String(record.progress);
-  editMoneyDeadlineError.value = '';
+  editMoneyForm.description = record.description || '';
   editMoneyModalOpen.value = true;
 };
 const submitEditMoney = () => {
   if (!editMoneyTarget.value) return;
-  editMoneyDeadlineError.value = '';
-  const deadline = editMoneyForm.deadline.trim();
-  if (deadline && !isValidDateYYYYMMDD(deadline)) {
-    editMoneyDeadlineError.value = '日期格式无效，请使用 YYYYMMDD 或 YYYY-MM-DD';
-    return;
-  }
   const record = editMoneyTarget.value;
   record.desc = editMoneyForm.desc.trim();
   record.amount = Number(editMoneyForm.amount) || 0;
-  record.deadline = normalizeDate(deadline) || todayStr();
+  record.deadline = editMoneyForm.deadline || todayStr();
   record.status = editMoneyForm.status as MoneyItem['status'];
   record.progress = Math.min(100, Math.max(0, Number(editMoneyForm.progress) || 0));
+  record.description = editMoneyForm.description;
   if (record.status === 'done') record.progress = 100;
+  syncAutoTodayTaskForMoney(record);
   pushTodayLog('money', `更新赚钱任务 ${record.desc}，${statusText(record.status)}，进度 ${record.progress}%`);
   editMoneyModalOpen.value = false;
+};
+
+const datePickerOpen = ref(false);
+const datePickerTarget = ref<'add' | 'edit' | 'task'>('add');
+const datePickerValue = computed({
+  get: () => {
+    if (datePickerTarget.value === 'add') return moneyForm.deadline;
+    if (datePickerTarget.value === 'edit') return editMoneyForm.deadline;
+    return taskForm.deadline;
+  },
+  set: (v: string) => {
+    if (datePickerTarget.value === 'add') {
+      moneyForm.deadline = v;
+    } else if (datePickerTarget.value === 'edit') {
+      editMoneyForm.deadline = v;
+    } else {
+      taskForm.deadline = v;
+    }
+  },
+});
+const openDatePicker = (target: 'add' | 'edit' | 'task') => {
+  datePickerTarget.value = target;
+  datePickerOpen.value = true;
+};
+
+const sortedMoneyItems = computed(() =>
+  [...moneyItems].sort((a: MoneyItem, b: MoneyItem) => a.deadline.localeCompare(b.deadline))
+);
+
+const moneyView = ref<'tasks' | 'calendar' | 'plan'>('tasks');
+
+const moneyPage = ref(1);
+const moneyPageSize = 10;
+const moneyTotalPages = computed(() => Math.ceil(sortedMoneyItems.value.length / moneyPageSize) || 1);
+const paginatedMoneyItems = computed(() => {
+  const start = (moneyPage.value - 1) * moneyPageSize;
+  return sortedMoneyItems.value.slice(start, start + moneyPageSize);
+});
+watch(moneyView, () => { moneyPage.value = 1; });
+watch(moneyTotalPages, (total) => { if (moneyPage.value > total) moneyPage.value = total || 1; });
+
+const moneyCalendarMonth = ref(new Date());
+const moneyMonthLabel = computed(() =>
+  `${moneyCalendarMonth.value.getFullYear()}年${moneyCalendarMonth.value.getMonth() + 1}月`
+);
+const moneyCalendarDays = computed(() => {
+  const year = moneyCalendarMonth.value.getFullYear();
+  const month = moneyCalendarMonth.value.getMonth();
+  const first = new Date(year, month, 1);
+  const start = new Date(first);
+  start.setDate(start.getDate() - first.getDay());
+  const days = [];
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    const ds = formatDateStr(d);
+    days.push({
+      date: ds,
+      day: d.getDate(),
+      inMonth: d.getMonth() === month,
+      tasks: moneyItems.filter((m: MoneyItem) => m.deadline === ds),
+    });
+  }
+  return days;
+});
+const prevMoneyMonth = () => {
+  moneyCalendarMonth.value = new Date(
+    moneyCalendarMonth.value.getFullYear(),
+    moneyCalendarMonth.value.getMonth() - 1,
+    1
+  );
+};
+const nextMoneyMonth = () => {
+  moneyCalendarMonth.value = new Date(
+    moneyCalendarMonth.value.getFullYear(),
+    moneyCalendarMonth.value.getMonth() + 1,
+    1
+  );
+};
+const moneyPlanDraft = ref('');
+watch(moneyView, (view) => {
+  if (view === 'plan') {
+    moneyPlanDraft.value = moneyPlan.value || '';
+  }
+});
+const saveMoneyPlan = () => {
+  moneyPlan.value = moneyPlanDraft.value;
+  Notification.success('长期规划已保存');
 };
 const totalIncome = computed(() => moneyItems.reduce((s, m) => s + m.amount, 0));
 const pendingIncome = computed(() =>
@@ -463,6 +879,17 @@ const displayTodayLogs = computed(() =>
     .filter((log) => log.date && log.date === todayStr())
     .sort((a, b) => a.time.localeCompare(b.time))
 );
+
+const inspirationLogs = computed(() =>
+  todayLogs
+    .map((log, index) => ({ log, index }))
+    .filter(({ log }) => log.category === 'inspiration')
+    .sort((a, b) => `${b.log.date}T${b.log.time}`.localeCompare(`${a.log.date}T${a.log.time}`))
+);
+
+const deleteInspiration = (index: number) => {
+  todayLogs.splice(index, 1);
+};
 
 const todayReport = computed(() => {
   const logs = displayTodayLogs.value;
@@ -566,6 +993,9 @@ const validateImportData = (data: any): { valid: false; error: string } | { vali
   if (data.todayLogs != null && !Array.isArray(data.todayLogs)) {
     return { valid: false, error: 'todayLogs 必须是数组' };
   }
+  if (data.tasks != null && !Array.isArray(data.tasks)) {
+    return { valid: false, error: 'tasks 必须是数组' };
+  }
   return { valid: true, data };
 };
 
@@ -597,6 +1027,7 @@ const executeImport = () => {
     weights.splice(0, weights.length, ...(parsed.weights || []));
     studyItems.splice(0, studyItems.length, ...(parsed.studyItems || []));
     moneyItems.splice(0, moneyItems.length, ...(parsed.moneyItems || []));
+    tasks.splice(0, tasks.length, ...(parsed.tasks || []));
 
     const today = todayStr();
     const logs = (parsed.todayLogs || [])
@@ -618,12 +1049,13 @@ const executeClearAll = () => {
   studyItems.splice(0, studyItems.length);
   moneyItems.splice(0, moneyItems.length);
   todayLogs.splice(0, todayLogs.length);
+  tasks.splice(0, tasks.length);
   clearAllModalOpen.value = false;
   Notification.success('已清空所有数据');
 };
 
 /* ==================== Today ==================== */
-const categoryName = (c: 'health' | 'study' | 'money') => ({ health: '健康', study: '学习', money: '赚钱' }[c]);
+const categoryName = (c: 'health' | 'study' | 'money' | 'inspiration') => ({ health: '健康', study: '学习', money: '赚钱', inspiration: '灵感' }[c]);
 
 /* ==================== Delete Modal ==================== */
 const deleteModalOpen = ref(false);
@@ -647,6 +1079,11 @@ const confirmDelete = () => {
     if (idx > -1) {
       const desc = moneyItems[idx].desc;
       moneyItems.splice(idx, 1);
+      for (let i = tasks.length - 1; i >= 0; i--) {
+        if (tasks[i].linkType === 'money' && tasks[i].linkId === id) {
+          tasks.splice(i, 1);
+        }
+      }
       pushTodayLog('money', `删除赚钱任务 ${desc}`);
     }
   }
@@ -659,6 +1096,12 @@ const detailRecord = ref<StudyItem | null>(null);
 const openDetail = (record: StudyItem) => {
   detailRecord.value = record;
   detailDrawerOpen.value = true;
+};
+const moneyDetailDrawerOpen = ref(false);
+const moneyDetailRecord = ref<MoneyItem | null>(null);
+const openMoneyDetail = (record: MoneyItem) => {
+  moneyDetailRecord.value = record;
+  moneyDetailDrawerOpen.value = true;
 };
 const normalizeLink = (url?: string) => {
   if (!url) return '#';
@@ -674,8 +1117,22 @@ const nowTimeStr = () => {
   const now = new Date();
   return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 };
-const pushTodayLog = (category: 'health' | 'study' | 'money', content: string) => {
+const pushTodayLog = (category: 'health' | 'study' | 'money' | 'inspiration', content: string) => {
   todayLogs.push({ date: todayStr(), time: nowTimeStr(), category, content });
+};
+const inspirationModalOpen = ref(false);
+const inspirationForm = ref('');
+const openInspirationModal = () => {
+  inspirationForm.value = '';
+  inspirationModalOpen.value = true;
+};
+const submitInspiration = () => {
+  const content = inspirationForm.value.trim();
+  if (!content) return;
+  pushTodayLog('inspiration', `💡 灵感：${content}`);
+  inspirationForm.value = '';
+  inspirationModalOpen.value = false;
+  Notification.success('灵感已记录');
 };
 </script>
 
@@ -716,6 +1173,65 @@ const pushTodayLog = (category: 'health' | 'study' | 'money', content: string) =
 
         <div class="tabs-wrapper">
           <Tabs v-model="activeTab" :items="tabItems" :shadow="true" :leaf-animation="true">
+            <!-- 任务 -->
+            <template #tasks>
+              <div class="section">
+                <div class="section-head">
+                  <Title color="app-yellow" size="middle">任务看板</Title>
+                  <Button type="primary" size="middle" @click="openTaskModal">新建任务</Button>
+                </div>
+                <div class="kanban-board">
+                  <div
+                    v-for="col in taskColumns"
+                    :key="col.key"
+                    class="kanban-column"
+                    @dragover.prevent
+                    @drop="handleDrop(col.key)"
+                  >
+                    <div class="kanban-column-header" :class="col.color">
+                      <span class="kanban-column-dot"></span>
+                      <span>{{ col.label }}</span>
+                      <Button
+                        v-if="col.key === 'today'"
+                        type="text"
+                        size="small"
+                        @click="taskChartOpen = true"
+                      >📊 时段</Button>
+                      <span class="kanban-column-count">{{ tasks.filter((t: TaskItem) => t.status === col.key).length }}</span>
+                    </div>
+                    <div class="kanban-column-body">
+                      <div
+                        v-for="task in tasks.filter((t: TaskItem) => t.status === col.key)"
+                        :key="task.id"
+                        class="kanban-card"
+                        :class="{ 'is-dragging': draggingTaskId === task.id, 'is-urgent': isDeadlineWithinDays(task.deadline, 3) }"
+                        draggable="true"
+                        @dragstart="handleDragStart(task)"
+                        @dragend="handleDragEnd"
+                        @click="openEditTask(task)"
+                      >
+                        <div class="kanban-card-title">{{ task.title }}</div>
+                        <div class="kanban-card-deadline">
+                          <span class="kanban-card-tag" :class="{ 'is-longterm': !task.deadline }">
+                            ⏰ {{ task.deadline || '长期' }}
+                          </span>
+                        </div>
+                        <div v-if="task.description" class="kanban-card-desc">{{ task.description }}</div>
+                        <div
+                          v-if="task.linkType"
+                          class="kanban-card-link"
+                          @click.stop="openTaskLink(task)"
+                        >{{ findTaskLinkLabel(task.linkType, task.linkId) }}</div>
+                        <div class="kanban-card-actions">
+                          <Button type="text" size="small" @click.stop="deleteTask(task)">删除</Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
+
             <!-- 健康 -->
             <template #health>
               <div class="health-stack">
@@ -799,7 +1315,22 @@ const pushTodayLog = (category: 'health' | 'study' | 'money', content: string) =
                     <Button type="primary" size="middle" @click="openStudyModal">添加学习项</Button>
                   </div>
                 </div>
-                <Table :columns="studyCols" :data-source="filteredStudy" row-key="id" :striped="true">
+                <Table
+                  :columns="studyCols"
+                  :data-source="paginatedStudy"
+                  row-key="id"
+                  :striped="true"
+                  :onRow="(record: StudyItem) => ({
+                    onClick: () => openDetail(record),
+                    style: { cursor: 'pointer' },
+                    draggable: true,
+                    onDragstart: () => handleStudyDragStart(record),
+                    onDragover: (e: DragEvent) => { e.preventDefault(); handleStudyDragOver(record); },
+                    onDrop: (e: DragEvent) => { e.preventDefault(); handleStudyDrop(record); },
+                    onDragend: handleStudyDragEnd,
+                    class: draggingStudyId === record.id ? 'study-row-dragging' : dragOverStudyId === record.id ? 'study-row-drag-over' : '',
+                  })"
+                >
                   <template #cell-name="{ record }">
                     <div style="display:flex;align-items:center;gap:12px;">
                       <div class="cell-thumb"
@@ -822,17 +1353,22 @@ const pushTodayLog = (category: 'health' | 'study' | 'money', content: string) =
                     </div>
                   </template>
                   <template #cell-detail="{ record }">
-                    <div v-if="record.type === 'video'" class="cell-meta detail-clickable" @click="openDetail(record)">第 {{ record.lesson }} / {{ record.totalLesson }} 课</div>
-                    <div v-else-if="record.type === 'book'" class="cell-meta detail-clickable" @click="openDetail(record)">第 {{ record.chapter }} / {{ record.totalChapter }} 章 · 第 {{ record.page }} / {{ record.totalPage }} 页</div>
-                    <div v-else class="cell-meta detail-clickable" @click="openDetail(record)">{{ record.notes }}</div>
+                    <div v-if="record.type === 'video'" class="cell-meta">第 {{ record.lesson }} / {{ record.totalLesson }} 课</div>
+                    <div v-else-if="record.type === 'book'" class="cell-meta">第 {{ record.chapter }} / {{ record.totalChapter }} 章 · 第 {{ record.page }} / {{ record.totalPage }} 页</div>
+                    <div v-else class="cell-meta">{{ record.notes }}</div>
                   </template>
                   <template #cell-action="{ record }">
                     <div style="display:flex;gap:8px;justify-content:center;">
-                      <Button type="text" size="middle" @click="openEditStudy(record)">编辑</Button>
-                      <Button type="text" size="middle" @click="openDelete('study', record.id)">删除</Button>
+                      <Button type="text" size="middle" @click.stop="openEditStudy(record)">编辑</Button>
+                      <Button type="text" size="middle" @click.stop="openDelete('study', record.id)">删除</Button>
                     </div>
                   </template>
                 </Table>
+                <div v-if="filteredStudy.length > studyPageSize" class="table-pagination">
+                  <Button type="default" size="small" :disabled="studyPage === 1" @click="studyPage--">上一页</Button>
+                  <span class="table-pagination-info">{{ studyPage }} / {{ studyTotalPages }}</span>
+                  <Button type="default" size="small" :disabled="studyPage === studyTotalPages" @click="studyPage++">下一页</Button>
+                </div>
               </div>
             </template>
 
@@ -859,10 +1395,36 @@ const pushTodayLog = (category: 'health' | 'study' | 'money', content: string) =
 
               <div class="section">
                 <div class="section-head">
-                  <Title color="app-yellow" size="middle">赚钱任务表</Title>
-                  <Button type="primary" size="middle" @click="openMoneyModal">添加任务</Button>
+                  <div style="display:flex;gap:32px;align-items:center;">
+                    <Title
+                      color="app-yellow"
+                      size="middle"
+                      :style="{ opacity: moneyView === 'tasks' ? 1 : 0.5, cursor: 'pointer' }"
+                      @click="moneyView = 'tasks'"
+                    >赚钱任务表</Title>
+                    <Title
+                      color="app-teal"
+                      size="middle"
+                      :style="{ opacity: moneyView === 'calendar' ? 1 : 0.5, cursor: 'pointer' }"
+                      @click="moneyView = 'calendar'"
+                    >日历视图</Title>
+                    <Title
+                      color="app-pink"
+                      size="middle"
+                      :style="{ opacity: moneyView === 'plan' ? 1 : 0.5, cursor: 'pointer' }"
+                      @click="moneyView = 'plan'"
+                    >长期规划</Title>
+                  </div>
+                  <Button v-if="moneyView === 'tasks'" type="primary" size="middle" @click="openMoneyModal">添加任务</Button>
                 </div>
-                <Table :columns="moneyCols" :data-source="moneyItems" row-key="id" :striped="true">
+                <Table
+                  v-if="moneyView === 'tasks'"
+                  :columns="moneyCols"
+                  :data-source="paginatedMoneyItems"
+                  row-key="id"
+                  :striped="true"
+                  :onRow="(record: MoneyItem) => ({ onClick: () => openMoneyDetail(record), style: { cursor: 'pointer' } })"
+                >
                   <template #cell-amount="{ record }">
                     <span style="font-weight:800;">¥{{ record.amount }}</span>
                   </template>
@@ -882,15 +1444,64 @@ const pushTodayLog = (category: 'health' | 'study' | 'money', content: string) =
                   </template>
                   <template #cell-action="{ record }">
                     <div style="display:flex;gap:8px;justify-content:center;">
-                      <Button type="text" size="middle" @click="openEditMoney(record)">编辑</Button>
-                      <Button type="text" size="middle" @click="openDelete('money', record.id)">删除</Button>
+                      <Button type="text" size="middle" @click.stop="openEditMoney(record)">编辑</Button>
+                      <Button type="text" size="middle" @click.stop="openDelete('money', record.id)">删除</Button>
                     </div>
                   </template>
                 </Table>
+                <div v-if="moneyView === 'tasks' && sortedMoneyItems.length > moneyPageSize" class="table-pagination">
+                  <Button type="default" size="small" :disabled="moneyPage === 1" @click="moneyPage--">上一页</Button>
+                  <span class="table-pagination-info">{{ moneyPage }} / {{ moneyTotalPages }}</span>
+                  <Button type="default" size="small" :disabled="moneyPage === moneyTotalPages" @click="moneyPage++">下一页</Button>
+                </div>
+                <div v-if="moneyView === 'calendar'">
+                  <Card pattern="default" style="width:100%;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                      <Button type="default" size="middle" style="font-size:30px" @click="prevMoneyMonth">‹</Button>
+                      <span style="font-weight:800;color:var(--text);">{{ moneyMonthLabel }}</span>
+                      <Button type="default" size="middle" style="font-size:30px" @click="nextMoneyMonth">›</Button>
+                    </div>
+                    <div class="calendar-grid">
+                      <div v-for="d in ['日','一','二','三','四','五','六']" :key="d" class="calendar-day-name">{{ d }}</div>
+                      <div
+                        v-for="(day, i) in moneyCalendarDays"
+                        :key="i"
+                        class="calendar-cell money-calendar-cell"
+                        :class="{ 'text-disabled': !day.inMonth, 'is-today': day.date === todayStr() }"
+                      >
+                        <div class="money-calendar-day">{{ day.day }}</div>
+                        <div v-if="day.tasks.length" class="money-calendar-tasks">
+                          <div
+                            v-for="task in day.tasks"
+                            :key="task.id"
+                            class="money-calendar-task"
+                            :class="`status-${task.status}`"
+                            @click="openMoneyDetail(task)"
+                          >
+                            <span class="money-calendar-task-desc">{{ task.desc }}</span>
+                            <span class="money-calendar-task-amount">¥{{ task.amount }}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                </div>
+                <div v-if="moneyView === 'plan'" class="form-field money-plan-editor">
+                  <QuillEditor
+                    v-model:content="moneyPlanDraft"
+                    content-type="html"
+                    theme="snow"
+                    toolbar="full"
+                    placeholder="填写赚钱模块的长期规划、目标、策略..."
+                  />
+                  <div style="margin-top:14px;display:flex;justify-content:flex-end;">
+                    <Button type="primary" size="middle" @click="saveMoneyPlan">保存</Button>
+                  </div>
+                </div>
               </div>
             </template>
 
-            <!-- 今日动态 -->
+            <!-- 动态 -->
             <template #today>
               <div class="two-col">
                 <div>
@@ -899,7 +1510,7 @@ const pushTodayLog = (category: 'health' | 'study' | 'money', content: string) =
                     <Title color="app-pink" size="middle">今日时间线</Title>
                   </div>
                   <Card>
-                    <div class="timeline">
+                    <div class="timeline" style="height: 600px; overflow-y: auto;">
                       <div v-for="(log, i) in displayTodayLogs" :key="i" class="timeline-item">
                         <span class="timeline-dot" :class="log.category"></span>
                         <div class="timeline-time">{{ log.time }} · {{ categoryName(log.category) }}</div>
@@ -921,7 +1532,31 @@ const pushTodayLog = (category: 'health' | 'study' | 'money', content: string) =
               </div>
             </template>
 
-            <!-- 导入导出 -->
+            <!-- 灵感 -->
+            <template #inspiration>
+              <div class="section">
+                <div class="section-head">
+                  <Title color="app-red" size="middle">灵感收集</Title>
+                </div>
+                <Card>
+                  <div v-if="inspirationLogs.length" class="timeline">
+                    <div v-for="(item, i) in inspirationLogs" :key="i" class="timeline-item">
+                      <span class="timeline-dot inspiration"></span>
+                      <div class="timeline-time">{{ item.log.date }} {{ item.log.time }}</div>
+                      <div style="display:flex;align-items:center;gap:12px;">
+                        <div class="timeline-content" style="flex:1;">{{ item.log.content }}</div>
+                        <span class="inspiration-delete" @click="deleteInspiration(item.index)">×</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-else class="animal-table-empty" style="padding:40px 0;text-align:center;">
+                    还没有记录灵感，点击右下角 💡 按钮添加吧~
+                  </div>
+                </Card>
+              </div>
+            </template>
+
+            <!-- 备份 -->
             <template #import-export>
               <div class="section">
                 <div class="section-head">
@@ -990,11 +1625,13 @@ const pushTodayLog = (category: 'health' | 'study' | 'money', content: string) =
         <div class="help-section">
           <Collapse question="这个页面怎么用？">
             <ul style="margin:0;padding-left:18px;line-height:1.8;">
+              <li><b>任务</b>：看板管理待开始/进行中/已完成的任务，可关联学习或赚钱项。</li>
               <li><b>健康</b>：记录每日体重，查看趋势曲线。</li>
               <li><b>学习</b>：添加学习项目并跟踪进度。</li>
               <li><b>赚钱</b>：管理任务和收入状态。</li>
-              <li><b>今日动态</b>：回顾一天的时间线。</li>
-              <li><b>导入导出</b>：备份和恢复本地数据。</li>
+              <li><b>动态</b>：回顾一天的时间线。</li>
+              <li><b>灵感</b>：查看所有记录的灵感。</li>
+              <li><b>备份</b>：备份和恢复本地数据。</li>
             </ul>
           </Collapse>
         </div>
@@ -1202,8 +1839,14 @@ const pushTodayLog = (category: 'health' | 'study' | 'money', content: string) =
           </div>
           <div class="form-field">
             <label class="form-field-label">截止日期</label>
-            <Input v-model="moneyForm.deadline" placeholder="YYYYMMDD 或 YYYY-MM-DD" style="width:100%;" />
-            <div v-if="moneyDeadlineError" class="form-field-error">{{ moneyDeadlineError }}</div>
+            <Input
+              v-model="moneyForm.deadline"
+              readonly
+              style="width:100%;cursor:pointer;"
+              @click="openDatePicker('add')"
+            >
+              <template #suffix>📅</template>
+            </Input>
           </div>
           <div class="form-field">
             <label class="form-field-label">状态</label>
@@ -1214,6 +1857,16 @@ const pushTodayLog = (category: 'health' | 'study' | 'money', content: string) =
             <Input v-model="moneyForm.progress" placeholder="进度 0-100" style="width:100%;">
               <template #suffix>%</template>
             </Input>
+          </div>
+          <div class="form-field">
+            <label class="form-field-label">描述</label>
+            <QuillEditor
+              v-model:content="moneyForm.description"
+              content-type="html"
+              theme="snow"
+              toolbar="full"
+              placeholder="填写任务描述、执行步骤、备注..."
+            />
           </div>
         </div>
         <template #footer>
@@ -1229,6 +1882,7 @@ const pushTodayLog = (category: 'health' | 'study' | 'money', content: string) =
         title="编辑赚钱任务"
         :typewriter="false"
         :show-footer="true"
+        :width="676"
       >
         <div style="display:flex;flex-direction:column;gap:16px;">
           <div class="form-field">
@@ -1241,8 +1895,14 @@ const pushTodayLog = (category: 'health' | 'study' | 'money', content: string) =
           </div>
           <div class="form-field">
             <label class="form-field-label">截止日期</label>
-            <Input v-model="editMoneyForm.deadline" placeholder="YYYYMMDD 或 YYYY-MM-DD" style="width:100%;" />
-            <div v-if="editMoneyDeadlineError" class="form-field-error">{{ editMoneyDeadlineError }}</div>
+            <Input
+              v-model="editMoneyForm.deadline"
+              readonly
+              style="width:100%;cursor:pointer;"
+              @click="openDatePicker('edit')"
+            >
+              <template #suffix>📅</template>
+            </Input>
           </div>
           <div class="form-field">
             <label class="form-field-label">状态</label>
@@ -1254,6 +1914,16 @@ const pushTodayLog = (category: 'health' | 'study' | 'money', content: string) =
               <template #suffix>%</template>
             </Input>
           </div>
+          <div class="form-field">
+            <label class="form-field-label">描述</label>
+            <QuillEditor
+              v-model:content="editMoneyForm.description"
+              content-type="html"
+              theme="snow"
+              toolbar="full"
+              placeholder="填写任务描述、执行步骤、备注..."
+            />
+          </div>
         </div>
         <template #footer>
           <div style="display:flex;justify-content:flex-end;gap:12px;">
@@ -1262,6 +1932,13 @@ const pushTodayLog = (category: 'health' | 'study' | 'money', content: string) =
           </div>
         </template>
       </Modal>
+
+      <DatePickerModal
+        v-model:open="datePickerOpen"
+        v-model="datePickerValue"
+        title="选择截止日期"
+        :mask-style="{ zIndex: 1200 }"
+      />
 
       <Drawer
         :open="detailDrawerOpen"
@@ -1323,8 +2000,174 @@ const pushTodayLog = (category: 'health' | 'study' | 'money', content: string) =
           </div>
         </div>
       </Drawer>
+
+      <Drawer
+        :open="moneyDetailDrawerOpen"
+        title="赚钱任务详情"
+        placement="bottom"
+        height="400"
+        @close="moneyDetailDrawerOpen = false"
+      >
+        <div v-if="moneyDetailRecord" class="drawer-detail">
+          <div class="drawer-detail-head">
+            <div style="font-weight:800;font-size:20px;color:var(--text);">{{ moneyDetailRecord.desc }}</div>
+            <span class="status-badge" :class="moneyDetailRecord.status">{{ statusText(moneyDetailRecord.status) }}</span>
+          </div>
+
+          <div class="drawer-detail-section">
+            <div class="drawer-detail-label">金额</div>
+            <div style="font-weight:700;color:var(--text);">¥{{ moneyDetailRecord.amount }}</div>
+          </div>
+
+          <div class="drawer-detail-section">
+            <div class="drawer-detail-label">截止日期</div>
+            <div>{{ moneyDetailRecord.deadline }}</div>
+          </div>
+
+          <div class="drawer-detail-section">
+            <div class="drawer-detail-label">进度</div>
+            <div style="font-weight:700;color:var(--text);">{{ moneyDetailRecord.progress }}%</div>
+            <div class="progress-bar">
+              <div class="progress-bar-fill" :style="{ width: moneyDetailRecord.progress + '%' }"></div>
+            </div>
+          </div>
+
+          <div v-if="moneyDetailRecord.description" class="drawer-detail-section">
+            <div class="drawer-detail-label">描述</div>
+            <div v-html="moneyDetailRecord.description"></div>
+          </div>
+        </div>
+      </Drawer>
     </div>
     <NotificationContainer />
+
+    <Button
+      danger
+      type="primary"
+      size="large"
+      style="position:fixed;right:28px;bottom:28px;z-index:1000;"
+      @click="openInspirationModal"
+    >
+      💡
+    </Button>
+
+    <Modal
+      v-model:open="taskModalOpen"
+      :title="taskModalMode === 'add' ? '新建任务' : '编辑任务'"
+      :typewriter="false"
+      :show-footer="true"
+      :width="676"
+      :mask-style="{ zIndex: 1100 }"
+    >
+      <div style="display:flex;flex-direction:column;gap:16px;">
+        <div class="form-field">
+          <label class="form-field-label">任务标题</label>
+          <Input v-model="taskForm.title" placeholder="任务标题" style="width:100%;" />
+        </div>
+        <div class="form-field">
+          <label class="form-field-label">截止时间</label>
+          <Input
+            v-model="taskForm.deadline"
+            readonly
+            placeholder="未选择则为长期任务"
+            style="width:100%;cursor:pointer;"
+            @click="openDatePicker('task')"
+          >
+            <template #suffix>📅</template>
+          </Input>
+        </div>
+        <div class="form-field">
+          <label class="form-field-label">计划时段</label>
+          <Select v-model="taskForm.timeSlot" :options="taskTimeSlotOptions" />
+        </div>
+        <div class="form-field">
+          <label class="form-field-label">描述</label>
+          <textarea
+            v-model="taskForm.description"
+            class="import-textarea"
+            style="width:100%;"
+            rows="3"
+            placeholder="补充说明..."
+          ></textarea>
+        </div>
+        <div class="form-field">
+          <label class="form-field-label">关联</label>
+          <Select v-model="taskForm.linkKey" :options="taskLinkOptions" />
+        </div>
+      </div>
+      <template #footer>
+        <div style="display:flex;justify-content:flex-end;gap:12px;">
+          <Button type="primary" size="middle" @click="taskModalOpen = false">取消</Button>
+          <Button type="primary" size="middle" @click="submitTask">{{ taskModalMode === 'add' ? '创建' : '保存' }}</Button>
+        </div>
+      </template>
+    </Modal>
+
+    <Modal
+      v-model:open="inspirationModalOpen"
+      title="记录灵感"
+      :typewriter="false"
+      :show-footer="true"
+      :width="1040"
+    >
+      <div class="form-field" style="align-self: stretch; width: 100%;">
+        <label class="form-field-label">灵感内容</label>
+        <textarea
+          v-model="inspirationForm"
+          class="import-textarea"
+          style="width:100%;"
+          rows="4"
+          placeholder="突然想到什么？记下来吧..."
+        ></textarea>
+      </div>
+      <template #footer>
+        <div style="display:flex;justify-content:flex-end;gap:12px;">
+          <Button type="primary" size="middle" @click="inspirationModalOpen = false">取消</Button>
+          <Button danger type="primary" size="middle" @click="submitInspiration">保存</Button>
+        </div>
+      </template>
+    </Modal>
+
+    <Modal
+      v-model:open="taskChartOpen"
+      title="今日任务时段分布"
+      :typewriter="false"
+      :show-footer="true"
+      :width="620"
+      @ok="taskChartOpen = false"
+    >
+      <div class="task-chart-body">
+        <div
+          v-if="taskChartData.length"
+          ref="taskChartRef"
+          class="task-chart"
+        ></div>
+        <div v-else class="animal-table-empty" style="padding:40px 0;text-align:center;">
+          今日任务列还没有任务哦~ 🌿
+        </div>
+        <div v-if="taskChartSelectedPeriod && selectedPeriodTasks.length" class="task-chart-detail">
+          <div class="task-chart-detail-title">
+            {{ taskPeriods.find((p) => p.key === taskChartSelectedPeriod)?.label }}时段完成
+          </div>
+          <div class="task-chart-detail-list">
+            <div
+              v-for="task in selectedPeriodTasks"
+              :key="task.id"
+              class="task-chart-detail-item"
+              @click="openEditTask(task)"
+            >
+              <span class="task-chart-detail-time">{{ getTaskTimeSlotLabel(task.timeSlot) }}</span>
+              <span class="task-chart-detail-title-text">{{ task.title }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <div style="display:flex;justify-content:flex-end;gap:12px;">
+          <Button type="primary" size="middle" @click="taskChartOpen = false">关闭</Button>
+        </div>
+      </template>
+    </Modal>
   </Cursor>
 </template>
 
@@ -1368,13 +2211,6 @@ const pushTodayLog = (category: 'health' | 'study' | 'money', content: string) =
   min-height: 260px;
 }
 
-.detail-clickable {
-  cursor: pointer;
-  transition: opacity 0.2s;
-}
-.detail-clickable:hover {
-  opacity: 0.75;
-}
 .form-field {
   display: flex;
   flex-direction: column;
@@ -1494,6 +2330,318 @@ const pushTodayLog = (category: 'health' | 'study' | 'money', content: string) =
 .leaf-3 { left: 55%; top: -3%; animation: leafFall 16s ease-in-out infinite 2s; }
 .leaf-4 { left: 75%; top: -10%; animation: leafFall 20s ease-in-out infinite 7s; }
 .leaf-5 { left: 90%; top: -6%; animation: leafFall 15s ease-in-out infinite 10s; }
+
+.inspiration-delete {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  color: var(--text-secondary);
+  font-size: 32px;
+  line-height: 1;
+  user-select: none;
+  transition: color 0.2s;
+}
+.inspiration-delete:hover {
+  color: var(--error);
+}
+
+.kanban-board {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+}
+.kanban-column {
+  display: flex;
+  flex-direction: column;
+  min-height: 420px;
+  background: rgba(247, 243, 223, 0.6);
+  border: 2px dashed #e8dcc8;
+  border-radius: 22px;
+  padding: 14px;
+  transition: background 0.2s, border-color 0.2s;
+}
+.kanban-column:has(.kanban-card.is-dragging) {
+  background: rgba(247, 243, 223, 0.9);
+}
+.kanban-column-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  font-weight: 800;
+  font-size: 15px;
+  color: #725d42;
+  margin-bottom: 14px;
+}
+.kanban-column-header.app-yellow { background: #fff8e0; }
+.kanban-column-header.app-blue { background: #e8edff; }
+.kanban-column-header.app-green { background: #e8f5e8; }
+.kanban-column-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.7;
+}
+.kanban-column-count {
+  margin-left: auto;
+  min-width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+}
+.kanban-column-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1 1 auto;
+}
+.kanban-card {
+  background: #fffdf5;
+  border: 2px solid #e8dcc8;
+  border-radius: 16px;
+  padding: 12px;
+  cursor: grab;
+  box-shadow: 0 2px 0 rgba(114, 93, 66, 0.06);
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+}
+.kanban-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(114, 93, 66, 0.12);
+  border-color: var(--primary);
+}
+.kanban-card.is-dragging {
+  opacity: 0.5;
+  cursor: grabbing;
+}
+.kanban-card.is-urgent {
+  border-color: var(--error);
+}
+.kanban-card.is-urgent:hover {
+  border-color: var(--error-active);
+}
+.kanban-card-title {
+  font-weight: 800;
+  font-size: 15px;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.kanban-card-deadline {
+  margin-bottom: 6px;
+}
+.kanban-card-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.7);
+  padding: 3px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+.kanban-card-tag.is-longterm {
+  color: var(--text-muted);
+  background: var(--bg-disabled);
+}
+.kanban-card-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-bottom: 8px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.kanban-card-link {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--primary);
+  background: var(--primary-bg);
+  padding: 3px 8px;
+  border-radius: 10px;
+  margin-bottom: 8px;
+  width: fit-content;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.kanban-card-link:hover {
+  background: rgba(25, 200, 185, 0.2);
+}
+.kanban-card-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.task-chart-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+.task-chart {
+  width: 500px;
+  height: 360px;
+  max-width: 100%;
+}
+.task-chart-detail-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 12px;
+  text-align: center;
+}
+.task-chart-detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.task-chart-detail-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #fffdf5;
+  border: 2px solid #e8dcc8;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+}
+.task-chart-detail-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(114, 93, 66, 0.12);
+  border-color: var(--primary);
+}
+.task-chart-detail-time {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.task-chart-detail-title-text {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.table-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 16px;
+}
+.table-pagination-info {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  min-width: 48px;
+  text-align: center;
+}
+:deep(.study-row-dragging) {
+  opacity: 0.5;
+}
+:deep(.study-row-drag-over) {
+  background: rgba(25, 200, 185, 0.18) !important;
+}
+.money-calendar-cell {
+  aspect-ratio: auto;
+  height: auto;
+  min-height: 104px;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 10px;
+  gap: 6px;
+  overflow: hidden;
+  background: #fffdf5;
+  border: 2px solid #e8dcc8;
+  border-radius: 18px;
+  box-shadow: 0 2px 0 rgba(114, 93, 66, 0.06);
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+}
+.money-calendar-cell:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 14px rgba(114, 93, 66, 0.12);
+  border-color: var(--primary);
+}
+.money-calendar-cell.text-disabled {
+  opacity: 0.45;
+  background: #f7f4e8;
+}
+.money-calendar-cell.is-today .money-calendar-day {
+  background: var(--primary-bg);
+  color: var(--primary);
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+.money-calendar-day {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-weight: 800;
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 2px;
+  transition: all 0.2s;
+}
+.money-calendar-tasks {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.money-calendar-task {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+  box-shadow: 0 1px 0 rgba(114, 93, 66, 0.08);
+}
+.money-calendar-task:hover {
+  transform: scale(1.02);
+  box-shadow: 0 3px 8px rgba(114, 93, 66, 0.15);
+}
+.money-calendar-task.status-pending {
+  background: #fff8e0;
+  color: #7a6528;
+}
+.money-calendar-task.status-done {
+  background: #e8f5e8;
+  color: #3a6b3a;
+}
+.money-calendar-task.status-paused {
+  background: #fff0e8;
+  color: #8a4a2a;
+}
+.money-calendar-task-desc {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+}
+.money-calendar-task-amount {
+  font-weight: 800;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
 
 @keyframes cloudDrift {
   from { transform: translateX(0); }

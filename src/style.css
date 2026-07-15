@@ -85,10 +85,9 @@ body {
 
 .page {
   flex: 1 1 auto;
-  max-width: 1400px;
   width: 100%;
   margin: 0 auto;
-  padding: 28px;
+  padding: 100px 250px;
   display: flex;
   flex-direction: column;
 }
@@ -180,6 +179,7 @@ body {
 .timeline-dot.health { background: var(--success); }
 .timeline-dot.study { background: #889df0; }
 .timeline-dot.money { background: #f7cd67; }
+.timeline-dot.inspiration { background: #e05a5a; }
 .timeline-time { font-size: 13px; color: var(--text-secondary); font-weight: 700; }
 .timeline-content { background: rgba(255,255,255,0.6); border-radius: 14px; padding: 12px 16px; margin-top: 4px; }
 
@@ -275,3 +275,136 @@ body {
 .import-textarea::placeholder {
   color: var(--text-disabled);
 }
+
+/* ==================== Quill Editor 风格适配 ==================== */
+.ql-toolbar,
+.ql-container {
+  border-color: var(--border) !important;
+  background: var(--bg-content);
+}
+.ql-toolbar {
+  border-radius: var(--r-sm) var(--r-sm) 0 0;
+  font-family: inherit;
+}
+.ql-toolbar .ql-formats {
+  margin-right: 10px;
+}
+.ql-toolbar button {
+  border-radius: 8px;
+}
+.ql-toolbar button:hover,
+.ql-toolbar button.ql-active {
+  color: var(--primary) !important;
+  background: rgba(25, 200, 185, 0.1);
+}
+.ql-toolbar .ql-stroke {
+  stroke: var(--text-secondary);
+}
+.ql-toolbar .ql-fill {
+  fill: var(--text-secondary);
+}
+.ql-toolbar button:hover .ql-stroke,
+.ql-toolbar button.ql-active .ql-stroke {
+  stroke: var(--primary);
+}
+.ql-toolbar button:hover .ql-fill,
+.ql-toolbar button.ql-active .ql-fill {
+  fill: var(--primary);
+}
+.ql-toolbar .ql-picker-label {
+  color: var(--text-secondary);
+}
+.ql-toolbar .ql-picker-label:hover,
+.ql-toolbar .ql-picker-label.ql-active {
+  color: var(--primary);
+}
+.ql-toolbar .ql-picker-options {
+  background: var(--bg-content);
+  border-color: var(--border);
+  border-radius: 10px;
+  box-shadow: 0 4px 14px rgba(121, 79, 39, 0.12);
+}
+.ql-toolbar .ql-picker-item {
+  color: var(--text-body);
+}
+.ql-toolbar .ql-picker-item:hover,
+.ql-toolbar .ql-picker-item.ql-selected {
+  color: var(--primary);
+}
+.ql-container {
+  border-radius: 0 0 var(--r-sm) var(--r-sm);
+}
+.ql-editor {
+  font-family: inherit;
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.7;
+  min-height: 160px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.ql-editor.ql-blank::before {
+  color: var(--text-disabled);
+  font-style: normal;
+}
+.ql-editor p,
+.ql-editor ol,
+.ql-editor ul {
+  margin-bottom: 10px;
+}
+.ql-editor a {
+  color: var(--primary);
+  text-decoration: underline;
+}
+.ql-editor blockquote {
+  border-left-color: var(--primary);
+  color: var(--text-muted);
+}
+.ql-snow .ql-tooltip {
+  background: var(--bg-content);
+  border-color: var(--border);
+  border-radius: 12px;
+  box-shadow: 0 4px 14px rgba(121, 79, 39, 0.12);
+  color: var(--text);
+}
+.ql-snow .ql-tooltip input[type="text"] {
+  background: var(--bg);
+  border-color: var(--border);
+  border-radius: 10px;
+  color: var(--text);
+}
+.ql-snow .ql-tooltip .ql-action,
+.ql-snow .ql-tooltip .ql-remove {
+  color: var(--primary);
+}
+.ql-snow .ql-editor img {
+  border-radius: 10px;
+  max-width: 100%;
+}
+
+.money-plan-editor .ql-editor {
+  min-height: 500px;
+  max-height: 1000px;
+}
+
+.money-plan-editor {
+  margin: 20px;
+}
+
+/* ==================== Select 下拉高度限制 ==================== */
+.animal-select__dropdown {
+  max-height: 320px !important;
+  overflow-y: auto !important;
+}
+.animal-select__dropdown::-webkit-scrollbar {
+  width: 6px;
+}
+.animal-select__dropdown::-webkit-scrollbar-thumb {
+  background: rgba(114, 93, 66, 0.25);
+  border-radius: 10px;
+}
+.animal-select__dropdown::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+
