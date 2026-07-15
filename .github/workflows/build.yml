@@ -1,0 +1,81 @@
+name: Build Electron Apps
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+  release:
+    types: [created]
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            script: electron:build:win
+            artifact: MyDay-Windows
+            path: MyDay/release/*.exe
+          - os: macos-latest
+            script: electron:build:mac
+            artifact: MyDay-macOS
+            path: MyDay/release/*.dmg
+          - os: ubuntu-latest
+            script: electron:build:linux
+            artifact: MyDay-Linux
+            path: MyDay/release/*.AppImage
+
+    steps:
+      - name: Checkout MyDay
+        uses: actions/checkout@v4
+        with:
+          path: MyDay
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: MyDay/package-lock.json
+
+      - name: Use remote animal-island-vue in CI
+        working-directory: MyDay
+        run: npm pkg set dependencies.animal-island-vue="github:DarkCodeMaster/animal-island-vue#main"
+
+      - name: Install dependencies
+        working-directory: MyDay
+        run: npm install
+
+      - name: Build Electron app
+        working-directory: MyDay
+        run: npm run ${{ matrix.script }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.path }}
+          if-no-files-found: error
+
+  release:
+    name: Attach to Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
