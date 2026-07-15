@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, shell } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -33,6 +33,19 @@ function createWindow() {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show();
+  });
+
+  // 所有外部链接都用系统默认浏览器打开
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: 'deny' };
+  });
+
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (url !== mainWindow.webContents.getURL()) {
+      event.preventDefault();
+      shell.openExternal(url);
+    }
   });
 
   mainWindow.on('closed', () => {
