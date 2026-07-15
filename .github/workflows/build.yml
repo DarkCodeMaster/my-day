@@ -36,6 +36,12 @@ jobs:
         with:
           path: MyDay
 
+      - name: Checkout animal-island-vue
+        uses: actions/checkout@v4
+        with:
+          repository: DarkCodeMaster/animal-island-vue
+          path: animal-island-vue
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -43,13 +49,15 @@ jobs:
           cache: npm
           cache-dependency-path: MyDay/package-lock.json
 
-      - name: Use remote animal-island-vue in CI
-        working-directory: MyDay
-        run: npm pkg set dependencies.animal-island-vue="github:DarkCodeMaster/animal-island-vue#main"
+      - name: Build animal-island-vue
+        working-directory: animal-island-vue
+        run: |
+          npm install
+          npm run build
 
       - name: Install dependencies
         working-directory: MyDay
-        run: npm install --no-package-lock
+        run: npm install
 
       - name: Build Electron app
         working-directory: MyDay
