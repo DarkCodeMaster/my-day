@@ -1,6 +1,16 @@
 export function todayStr(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return formatDateStr(new Date());
+}
+
+export function formatDateStr(d: Date): string {
+  const parts = new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(d);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value || '';
+  return `${get('year')}-${get('month')}-${get('day')}`;
 }
 
 export function pad(n: number): string {

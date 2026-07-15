@@ -30,6 +30,7 @@ export interface MoneyItem {
 }
 
 export interface TodayLog {
+  date: string;
   time: string;
   category: 'health' | 'study' | 'money';
   content: string;

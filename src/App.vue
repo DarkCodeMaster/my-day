@@ -22,10 +22,12 @@ import {
   Icon,
   Drawer,
   Wallet,
+  Notification,
+  NotificationContainer,
 } from 'animal-island-vue';
 import type { SelectOption, RadioOption } from 'animal-island-vue';
 import { useMyDayStorage } from '@/composables/useMyDayStorage';
-import { todayStr } from '@/utils/date';
+import { todayStr, formatDateStr } from '@/utils/date';
 import type { StudyItem, MoneyItem, WeightRecord } from '@/types';
 
 const {
@@ -41,44 +43,6 @@ const {
 const welcomeTrigger = ref(0);
 onMounted(() => {
   welcomeTrigger.value++;
-  // 首次无数据时填充示例，避免空状态
-  if (!weights.length) {
-    weights.push(
-      { date: '2026-07-08', weight: 68.5 },
-      { date: '2026-07-09', weight: 68.2 },
-      { date: '2026-07-10', weight: 67.9 },
-      { date: '2026-07-11', weight: 67.8 },
-      { date: '2026-07-12', weight: 67.5 },
-      { date: '2026-07-13', weight: 67.3 },
-      { date: '2026-07-14', weight: 67.0 }
-    );
-  }
-  if (!studyItems.length) {
-    studyItems.push(
-      { id: 1, type: 'video', name: 'Vue 3 进阶实战', image: '#19c8b9', abbr: 'Vue', progress: 75, link: 'example.com/vue', lesson: 12, totalLesson: 16 },
-      { id: 2, type: 'book', name: '原子习惯', image: '#f8a6b2', abbr: '原子', progress: 45, chapter: 4, totalChapter: 10, page: 128, totalPage: 280 },
-      { id: 3, type: 'skill', name: '吉他指弹', image: '#82d5bb', abbr: '吉他', progress: 30, notes: '练习 C 大调音阶' },
-      { id: 4, type: 'video', name: 'TypeScript 全栈', image: '#889df0', abbr: 'TS', progress: 20, link: 'example.com/ts', lesson: 3, totalLesson: 15 },
-      { id: 5, type: 'book', name: '深度工作', image: '#f7cd67', abbr: '深度', progress: 60, chapter: 2, totalChapter: 8, page: 85, totalPage: 260 }
-    );
-  }
-  if (!moneyItems.length) {
-    moneyItems.push(
-      { id: 1, desc: '帮朋友做网站首页', amount: 1200, deadline: '2026-07-20', progress: 60, status: 'pending' },
-      { id: 2, desc: '二手书出售', amount: 180, deadline: '2026-07-15', progress: 100, status: 'done' },
-      { id: 3, desc: '设计一套表情包', amount: 800, deadline: '2026-07-28', progress: 0, status: 'paused' },
-      { id: 4, desc: '接单翻译文档', amount: 450, deadline: '2026-07-18', progress: 30, status: 'pending' }
-    );
-  }
-  if (!todayLogs.length) {
-    todayLogs.push(
-      { time: '07:30', category: 'health', content: '晨间体重 67.0 kg，比昨天 -0.3 kg 🎉' },
-      { time: '09:00', category: 'study', content: '完成 Vue 第 12 课：Composition API 深入' },
-      { time: '12:00', category: 'money', content: '收到二手书转账 ¥180' },
-      { time: '15:30', category: 'study', content: '阅读《原子习惯》第 4 章，进度 45%' },
-      { time: '18:00', category: 'health', content: '晚餐记录：沙拉 + 鸡胸肉' }
-    );
-  }
 });
 
 /* ==================== Tabs ==================== */
@@ -87,6 +51,7 @@ const tabItems = [
   { key: 'study', label: '学习' },
   { key: 'money', label: '赚钱' },
   { key: 'today', label: '今日动态' },
+  { key: 'import-export', label: '导入导出' },
 ];
 
 /* ==================== Health ==================== */
@@ -104,10 +69,25 @@ const addWeight = () => {
   const val = parseFloat(newWeightValue.value);
   if (!newWeightDate.value || isNaN(val)) return;
   const idx = weights.findIndex((w: WeightRecord) => w.date === newWeightDate.value);
-  if (idx > -1) weights[idx].weight = val;
+  const existed = idx > -1;
+  if (existed) weights[idx].weight = val;
   else weights.push({ date: newWeightDate.value, weight: val });
   newWeightValue.value = '';
   weights.sort((a: WeightRecord, b: WeightRecord) => a.date.localeCompare(b.date));
+
+  const isToday = newWeightDate.value === todayStr();
+  const prev = weights
+    .filter((w: WeightRecord) => w.date < todayStr())
+    .sort((a: WeightRecord, b: WeightRecord) => b.date.localeCompare(a.date))[0];
+  let content = `${existed ? '更新' : '记录'}体重 ${val} kg`;
+  if (!isToday) {
+    content += `（${newWeightDate.value}）`;
+  }
+  if (isToday && prev) {
+    const diff = Number((val - prev.weight).toFixed(1));
+    content += `，比昨天 ${diff > 0 ? '+' : ''}${diff} kg ${diff < 0 ? '🎉' : ''}`;
+  }
+  pushTodayLog('health', content);
 };
 
 const calendarDays = computed(() => {
@@ -120,7 +100,7 @@ const calendarDays = computed(() => {
   for (let i = 0; i < 42; i++) {
     const d = new Date(start);
     d.setDate(start.getDate() + i);
-    const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const ds = formatDateStr(d);
     days.push({
       date: ds,
       day: d.getDate(),
@@ -144,7 +124,7 @@ const selectDay = (day: any) => {
 };
 
 const chartData = computed(() => {
-  const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const fmt = (d: Date) => formatDateStr(d);
   if (chartRange.value === 'all') {
     const data = weights.filter((w: WeightRecord) => w.weight !== null).sort((a: WeightRecord, b: WeightRecord) => a.date.localeCompare(b.date));
     return data.map((d: WeightRecord) => ({ date: d.date, label: d.date.slice(5), weight: d.weight }));
@@ -202,10 +182,10 @@ const studyRadio: RadioOption[] = [
 ];
 const studyCols: any[] = [
   { title: '项目', dataIndex: 'name' },
-  { title: '类型', dataIndex: 'type', width: '80px', align: 'center' },
-  { title: '进度', dataIndex: 'progress', width: '140px' },
-  { title: '详情', dataIndex: 'detail', width: '220px' },
-  { title: '操作', dataIndex: 'action', width: '80px', align: 'center' },
+  { title: '类型', dataIndex: 'type', width: '90px', align: 'center' },
+  { title: '进度', dataIndex: 'progress', width: '150px' },
+  { title: '详情', dataIndex: 'detail', width: '240px' },
+  { title: '操作', dataIndex: 'action', width: '100px', align: 'center' },
 ];
 const studyTypeOptions: RadioOption[] = [
   { label: '视频', value: 'video' },
@@ -295,6 +275,7 @@ const addStudy = () => {
   }
   studyItems.push(item);
   resetStudyForm();
+  pushTodayLog('study', `添加学习项 ${item.name}，进度 ${item.progress}%`);
 };
 
 const studyModalOpen = ref(false);
@@ -348,17 +329,18 @@ const submitEditStudy = () => {
   } else {
     record.progress = Math.min(100, Math.max(0, Number(editProgress.value) || 0));
   }
+  pushTodayLog('study', `更新 ${record.name} 进度为 ${record.progress}%`);
   editStudyModalOpen.value = false;
 };
 
 /* ==================== Money ==================== */
 const moneyCols: any[] = [
   { title: '业务描述', dataIndex: 'desc' },
-  { title: '金额', dataIndex: 'amount', width: '100px', align: 'right' },
-  { title: '截止', dataIndex: 'deadline', width: '110px' },
-  { title: '进度', dataIndex: 'progress', width: '140px' },
-  { title: '状态', dataIndex: 'status', width: '90px' },
-  { title: '操作', dataIndex: 'action', width: '110px', align: 'center' },
+  { title: '金额', dataIndex: 'amount', width: '110px', align: 'right' },
+  { title: '截止', dataIndex: 'deadline', width: '120px' },
+  { title: '进度', dataIndex: 'progress', width: '150px' },
+  { title: '状态', dataIndex: 'status', width: '100px' },
+  { title: '操作', dataIndex: 'action', width: '120px', align: 'center' },
 ];
 const moneyStatusOptions: SelectOption[] = [
   { key: 'pending', label: '未完成' },
@@ -379,23 +361,60 @@ const resetMoneyForm = () => {
   moneyForm.status = 'pending';
   moneyForm.progress = '';
 };
+
+const moneyDeadlineError = ref('');
+const editMoneyDeadlineError = ref('');
+
+const isValidDateYYYYMMDD = (s: string) => {
+  if (!s) return false;
+  if (/^\d{8}$/.test(s)) {
+    const y = parseInt(s.slice(0, 4), 10);
+    const m = parseInt(s.slice(4, 6), 10);
+    const d = parseInt(s.slice(6, 8), 10);
+    const date = new Date(y, m - 1, d);
+    return date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const [y, m, d] = s.split('-').map(Number);
+    const date = new Date(y, m - 1, d);
+    return date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d;
+  }
+  return false;
+};
+
+const normalizeDate = (s: string) => {
+  if (/^\d{8}$/.test(s)) {
+    return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
+  }
+  return s;
+};
+
 const moneyModalOpen = ref(false);
 const openMoneyModal = () => {
   resetMoneyForm();
+  moneyDeadlineError.value = '';
   moneyModalOpen.value = true;
 };
 const submitMoney = () => {
   if (!moneyForm.desc || !moneyForm.amount) return;
-  moneyItems.push({
+  moneyDeadlineError.value = '';
+  const deadline = moneyForm.deadline.trim();
+  if (deadline && !isValidDateYYYYMMDD(deadline)) {
+    moneyDeadlineError.value = '日期格式无效，请使用 YYYYMMDD 或 YYYY-MM-DD';
+    return;
+  }
+  const item: MoneyItem = {
     id: Date.now(),
     desc: moneyForm.desc,
     amount: Number(moneyForm.amount),
-    deadline: moneyForm.deadline || todayStr(),
+    deadline: normalizeDate(deadline) || todayStr(),
     progress: Math.min(100, Math.max(0, Number(moneyForm.progress) || 0)),
     status: moneyForm.status as MoneyItem['status'],
-  });
+  };
+  moneyItems.push(item);
   resetMoneyForm();
   moneyModalOpen.value = false;
+  pushTodayLog('money', `添加赚钱任务 ${item.desc} ¥${item.amount}，${statusText(item.status)}`);
 };
 const editMoneyModalOpen = ref(false);
 const editMoneyTarget = ref<MoneyItem | null>(null);
@@ -413,23 +432,195 @@ const openEditMoney = (record: MoneyItem) => {
   editMoneyForm.deadline = record.deadline;
   editMoneyForm.status = record.status;
   editMoneyForm.progress = String(record.progress);
+  editMoneyDeadlineError.value = '';
   editMoneyModalOpen.value = true;
 };
 const submitEditMoney = () => {
   if (!editMoneyTarget.value) return;
+  editMoneyDeadlineError.value = '';
+  const deadline = editMoneyForm.deadline.trim();
+  if (deadline && !isValidDateYYYYMMDD(deadline)) {
+    editMoneyDeadlineError.value = '日期格式无效，请使用 YYYYMMDD 或 YYYY-MM-DD';
+    return;
+  }
   const record = editMoneyTarget.value;
   record.desc = editMoneyForm.desc.trim();
   record.amount = Number(editMoneyForm.amount) || 0;
-  record.deadline = editMoneyForm.deadline || todayStr();
+  record.deadline = normalizeDate(deadline) || todayStr();
   record.status = editMoneyForm.status as MoneyItem['status'];
   record.progress = Math.min(100, Math.max(0, Number(editMoneyForm.progress) || 0));
   if (record.status === 'done') record.progress = 100;
+  pushTodayLog('money', `更新赚钱任务 ${record.desc}，${statusText(record.status)}，进度 ${record.progress}%`);
   editMoneyModalOpen.value = false;
 };
-const totalIncome = computed(() => moneyItems.filter((m: MoneyItem) => m.status === 'done').reduce((s, m) => s + m.amount, 0));
+const totalIncome = computed(() => moneyItems.reduce((s, m) => s + m.amount, 0));
 const pendingIncome = computed(() =>
-  moneyItems.filter((m: MoneyItem) => m.status === 'pending').reduce((s, m) => s + m.amount * (m.progress / 100), 0)
+  moneyItems.filter((m: MoneyItem) => m.status !== 'done').reduce((s, m) => s + m.amount, 0)
 );
+
+const displayTodayLogs = computed(() =>
+  todayLogs
+    .filter((log) => log.date && log.date === todayStr())
+    .sort((a, b) => a.time.localeCompare(b.time))
+);
+
+const todayReport = computed(() => {
+  const logs = displayTodayLogs.value;
+  if (logs.length === 0) {
+    return '今天还没有记录，去健康/学习/赚钱页面添加吧 🌿';
+  }
+  const healthCount = logs.filter((l) => l.category === 'health').length;
+  const studyAdd = logs.filter((l) => l.category === 'study' && l.content.startsWith('添加')).length;
+  const studyUpdate = logs.filter((l) => l.category === 'study' && l.content.startsWith('更新')).length;
+  const studyDelete = logs.filter((l) => l.category === 'study' && l.content.startsWith('删除')).length;
+  const moneyAdd = logs.filter((l) => l.category === 'money' && l.content.startsWith('添加')).length;
+  const moneyUpdate = logs.filter((l) => l.category === 'money' && l.content.startsWith('更新')).length;
+  const moneyDelete = logs.filter((l) => l.category === 'money' && l.content.startsWith('删除')).length;
+
+  const parts: string[] = [];
+  if (healthCount) parts.push(`记录体重 ${healthCount} 次`);
+  if (studyAdd || studyUpdate || studyDelete) {
+    const sub: string[] = [];
+    if (studyAdd) sub.push(`新增 ${studyAdd} 项`);
+    if (studyUpdate) sub.push(`更新 ${studyUpdate} 项`);
+    if (studyDelete) sub.push(`删除 ${studyDelete} 项`);
+    parts.push(`学习${sub.join('、')}`);
+  }
+  if (moneyAdd || moneyUpdate || moneyDelete) {
+    const sub: string[] = [];
+    if (moneyAdd) sub.push(`新增 ${moneyAdd} 个`);
+    if (moneyUpdate) sub.push(`更新 ${moneyUpdate} 个`);
+    if (moneyDelete) sub.push(`删除 ${moneyDelete} 个`);
+    parts.push(`赚钱任务${sub.join('、')}`);
+  }
+  return `今天${parts.join('，')}。继续加油 🌿`;
+});
+
+/* ==================== Import / Export ==================== */
+const exportJson = ref('');
+const importJson = ref('');
+const importError = ref('');
+const importFileInput = ref<HTMLInputElement | null>(null);
+const importConfirmModalOpen = ref(false);
+
+const generateExport = () => {
+  const raw = localStorage.getItem('myday') || '{}';
+  try {
+    const data = JSON.parse(raw);
+    exportJson.value = JSON.stringify(data, null, 2);
+  } catch {
+    exportJson.value = raw;
+  }
+};
+
+const copyExport = async () => {
+  if (!exportJson.value) generateExport();
+  try {
+    await navigator.clipboard.writeText(exportJson.value);
+    Notification.success('已复制到剪贴板');
+  } catch {
+    Notification.error('复制失败，请手动复制');
+  }
+};
+
+const downloadExport = () => {
+  if (!exportJson.value) generateExport();
+  const blob = new Blob([exportJson.value], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `myday-${todayStr()}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+
+const uploadImportFile = () => {
+  importFileInput.value?.click();
+};
+
+const handleImportFile = (e: Event) => {
+  const target = e.target as HTMLInputElement;
+  const file = target.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    importJson.value = String(reader.result || '');
+    importError.value = '';
+  };
+  reader.onerror = () => {
+    importError.value = '文件读取失败';
+  };
+  reader.readAsText(file);
+  target.value = '';
+};
+
+const validateImportData = (data: any): { valid: false; error: string } | { valid: true; data: any } => {
+  if (typeof data !== 'object' || data === null) {
+    return { valid: false, error: '数据必须是 JSON 对象' };
+  }
+  if (!Array.isArray(data.weights)) return { valid: false, error: '缺少 weights 数组' };
+  if (!Array.isArray(data.studyItems)) return { valid: false, error: '缺少 studyItems 数组' };
+  if (!Array.isArray(data.moneyItems)) return { valid: false, error: '缺少 moneyItems 数组' };
+  if (data.todayLogs != null && !Array.isArray(data.todayLogs)) {
+    return { valid: false, error: 'todayLogs 必须是数组' };
+  }
+  return { valid: true, data };
+};
+
+const confirmImport = () => {
+  importError.value = '';
+  if (!importJson.value.trim()) {
+    importError.value = '请输入或上传 JSON 数据';
+    return;
+  }
+  try {
+    const parsed = JSON.parse(importJson.value);
+    const result = validateImportData(parsed);
+    if (!result.valid) {
+      importError.value = result.error;
+      return;
+    }
+    importConfirmModalOpen.value = true;
+  } catch (e) {
+    importError.value = `JSON 解析失败：${e instanceof Error ? e.message : String(e)}`;
+  }
+};
+
+const executeImport = () => {
+  try {
+    const parsed = JSON.parse(importJson.value);
+    const result = validateImportData(parsed);
+    if (!result.valid) return;
+
+    weights.splice(0, weights.length, ...(parsed.weights || []));
+    studyItems.splice(0, studyItems.length, ...(parsed.studyItems || []));
+    moneyItems.splice(0, moneyItems.length, ...(parsed.moneyItems || []));
+
+    const today = todayStr();
+    const logs = (parsed.todayLogs || [])
+      .map((log: any) => (typeof log === 'object' && log ? { ...log, date: log.date || today } : null))
+      .filter((log: any) => log && log.date === today);
+    todayLogs.splice(0, todayLogs.length, ...logs);
+
+    importJson.value = '';
+    importConfirmModalOpen.value = false;
+    Notification.success('导入成功');
+  } catch (e) {
+    importError.value = `导入失败：${e instanceof Error ? e.message : String(e)}`;
+  }
+};
+
+const clearAllModalOpen = ref(false);
+const executeClearAll = () => {
+  weights.splice(0, weights.length);
+  studyItems.splice(0, studyItems.length);
+  moneyItems.splice(0, moneyItems.length);
+  todayLogs.splice(0, todayLogs.length);
+  clearAllModalOpen.value = false;
+  Notification.success('已清空所有数据');
+};
 
 /* ==================== Today ==================== */
 const categoryName = (c: 'health' | 'study' | 'money') => ({ health: '健康', study: '学习', money: '赚钱' }[c]);
@@ -446,10 +637,18 @@ const confirmDelete = () => {
   const { type, id } = deleteTarget.value;
   if (type === 'study') {
     const idx = studyItems.findIndex((s: StudyItem) => s.id === id);
-    if (idx > -1) studyItems.splice(idx, 1);
+    if (idx > -1) {
+      const name = studyItems[idx].name;
+      studyItems.splice(idx, 1);
+      pushTodayLog('study', `删除学习项 ${name}`);
+    }
   } else {
     const idx = moneyItems.findIndex((m: MoneyItem) => m.id === id);
-    if (idx > -1) moneyItems.splice(idx, 1);
+    if (idx > -1) {
+      const desc = moneyItems[idx].desc;
+      moneyItems.splice(idx, 1);
+      pushTodayLog('money', `删除赚钱任务 ${desc}`);
+    }
   }
   deleteModalOpen.value = false;
 };
@@ -470,6 +669,14 @@ const normalizeLink = (url?: string) => {
 /* ==================== Helpers ==================== */
 const studyTypeText = (type: string) => (type === 'video' ? '视频' : type === 'book' ? '书籍' : '技能');
 const statusText = (status: string) => (status === 'done' ? '完成' : status === 'pending' ? '未完成' : '暂停');
+
+const nowTimeStr = () => {
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+};
+const pushTodayLog = (category: 'health' | 'study' | 'money', content: string) => {
+  todayLogs.push({ date: todayStr(), time: nowTimeStr(), category, content });
+};
 </script>
 
 <template>
@@ -487,6 +694,8 @@ const statusText = (status: string) => (status === 'done' ? '完成' : status ==
         <div class="ac-leaf leaf-5">🌿</div>
       </div>
       <Loading :active="!isLoaded" style="position: fixed; inset: 0; z-index: 9999;" />
+
+      <img src="/sun.png" alt="" class="corner-sun" aria-hidden="true" />
 
       <div class="page">
         <header class="page-header">
@@ -512,14 +721,13 @@ const statusText = (status: string) => (status === 'done' ? '完成' : status ==
               <div class="health-stack">
                 <div>
                   <div class="panel-title">
-                    <span class="dot"></span>
                     <Title color="app-green" size="middle">体重日历</Title>
                   </div>
-                  <Card>
+                  <Card class="health-card">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-                      <Button type="default" size="small" @click="prevMonth">‹</Button>
+                      <Button type="default" size="middle" style="font-size:30px" @click="prevMonth">‹</Button>
                       <span style="font-weight:800;color:var(--text);">{{ monthLabel }}</span>
-                      <Button type="default" size="small" @click="nextMonth">›</Button>
+                      <Button type="default" size="middle" style="font-size:30px" @click="nextMonth">›</Button>
                     </div>
                     <div class="calendar-grid">
                       <div v-for="d in ['日','一','二','三','四','五','六']" :key="d" class="calendar-day-name">{{ d }}</div>
@@ -539,20 +747,19 @@ const statusText = (status: string) => (status === 'done' ? '完成' : status ==
                       </Tooltip>
                     </div>
                     <div style="margin-top:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-                      <Input v-model="newWeightDate" size="small" style="width:130px" />
-                      <Input v-model="newWeightValue" size="small" placeholder="体重 kg" style="width:100px" />
-                      <Button type="primary" size="small" @click="addWeight">记录</Button>
+                      <Input v-model="newWeightDate" size="middle" style="width:150px" />
+                      <Input v-model="newWeightValue" size="middle" placeholder="体重 kg" style="width:120px" />
+                      <Button type="primary" size="middle" @click="addWeight">记录</Button>
                     </div>
                   </Card>
                 </div>
 
                 <div>
                   <div class="panel-title">
-                    <span class="dot"></span>
                     <Title color="app-teal" size="middle">趋势曲线</Title>
                   </div>
-                  <Card>
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                  <Card class="health-card">
+                    <div style="display:flex;justify-content:flex-start;align-items:center;gap:12px;margin-bottom:12px;">
                       <span style="font-weight:700;color:var(--text);">体重变化趋势</span>
                       <Select v-model="chartRange" :options="chartOptions" />
                     </div>
@@ -588,16 +795,15 @@ const statusText = (status: string) => (status === 'done' ? '完成' : status ==
                     </Switch>
                   </div>
                   <div class="form-row">
-                    <Radio v-model="studyType" :options="studyRadio" size="small" direction="horizontal" />
+                    <Radio v-model="studyType" :options="studyRadio" size="middle" direction="horizontal" />
                     <Button type="primary" size="middle" @click="openStudyModal">添加学习项</Button>
                   </div>
                 </div>
                 <Table :columns="studyCols" :data-source="filteredStudy" row-key="id" :striped="true">
                   <template #cell-name="{ record }">
                     <div style="display:flex;align-items:center;gap:12px;">
-                      <div
-                        class="cell-thumb"
-                        :style="{ background: record.image, color: '#fff', textShadow: '0 1px 1px rgba(0,0,0,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '14px' }"
+                      <div class="cell-thumb"
+                        :style="{ background: record.image, color: '#fff', textShadow: '0 1px 1px rgba(0,0,0,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '15px' }"
                       >
                         {{ record.abbr }}
                       </div>
@@ -621,9 +827,9 @@ const statusText = (status: string) => (status === 'done' ? '完成' : status ==
                     <div v-else class="cell-meta detail-clickable" @click="openDetail(record)">{{ record.notes }}</div>
                   </template>
                   <template #cell-action="{ record }">
-                    <div style="display:flex;gap:6px;justify-content:center;">
-                      <Button type="text" size="small" @click="openEditStudy(record)">编辑</Button>
-                      <Button type="text" size="small" @click="openDelete('study', record.id)">删除</Button>
+                    <div style="display:flex;gap:8px;justify-content:center;">
+                      <Button type="text" size="middle" @click="openEditStudy(record)">编辑</Button>
+                      <Button type="text" size="middle" @click="openDelete('study', record.id)">删除</Button>
                     </div>
                   </template>
                 </Table>
@@ -675,9 +881,9 @@ const statusText = (status: string) => (status === 'done' ? '完成' : status ==
                     </span>
                   </template>
                   <template #cell-action="{ record }">
-                    <div style="display:flex;gap:6px;justify-content:center;">
-                      <Button type="text" size="small" @click="openEditMoney(record)">编辑</Button>
-                      <Button type="text" size="small" @click="openDelete('money', record.id)">删除</Button>
+                    <div style="display:flex;gap:8px;justify-content:center;">
+                      <Button type="text" size="middle" @click="openEditMoney(record)">编辑</Button>
+                      <Button type="text" size="middle" @click="openDelete('money', record.id)">删除</Button>
                     </div>
                   </template>
                 </Table>
@@ -694,7 +900,7 @@ const statusText = (status: string) => (status === 'done' ? '完成' : status ==
                   </div>
                   <Card>
                     <div class="timeline">
-                      <div v-for="(log, i) in todayLogs" :key="i" class="timeline-item">
+                      <div v-for="(log, i) in displayTodayLogs" :key="i" class="timeline-item">
                         <span class="timeline-dot" :class="log.category"></span>
                         <div class="timeline-time">{{ log.time }} · {{ categoryName(log.category) }}</div>
                         <div class="timeline-content">{{ log.content }}</div>
@@ -709,13 +915,73 @@ const statusText = (status: string) => (status === 'done' ? '完成' : status ==
                     <Title color="app-yellow" size="middle">今日报告</Title>
                   </div>
                   <Card color="app-yellow">
-                    <p style="margin:0;line-height:1.7;">
-                      今天体重 <b>{{ weights[weights.length - 1]?.weight }} kg</b>，学习
-                      <b>{{ filteredStudy.length }}</b> 项，赚钱任务完成
-                      <b>{{ moneyItems.filter((m: MoneyItem) => m.status === 'done').length }}</b> 个。继续加油 🌿
-                    </p>
+                    <p style="margin:0;line-height:1.7;">{{ todayReport }}</p>
                   </Card>
                 </div>
+              </div>
+            </template>
+
+            <!-- 导入导出 -->
+            <template #import-export>
+              <div class="section">
+                <div class="section-head">
+                  <Title color="app-green" size="middle">数据备份与恢复</Title>
+                </div>
+
+                <Card color="app-teal">
+                  <div class="form-field">
+                    <label class="form-field-label">导出数据</label>
+                    <textarea
+                      v-model="exportJson"
+                      class="import-textarea"
+                      readonly
+                      rows="8"
+                      placeholder="点击导出后 JSON 会显示在这里"
+                    ></textarea>
+                    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:10px;">
+                      <Button type="primary" size="middle" @click="generateExport">生成 JSON</Button>
+                      <Button type="primary" size="middle" @click="copyExport">复制到剪贴板</Button>
+                      <Button type="primary" size="middle" @click="downloadExport">下载文件</Button>
+                    </div>
+                  </div>
+                </Card>
+
+                <Card color="app-yellow" style="margin-top:20px;">
+                  <div class="form-field">
+                    <label class="form-field-label">导入数据</label>
+                    <textarea
+                      v-model="importJson"
+                      class="import-textarea"
+                      rows="8"
+                      placeholder="粘贴 JSON 或点击上传文件"
+                    ></textarea>
+                    <div v-if="importError" class="form-field-error">{{ importError }}</div>
+                    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:10px;">
+                      <Button type="primary" size="middle" @click="uploadImportFile">上传 JSON 文件</Button>
+                      <Button type="primary" size="middle" @click="confirmImport">导入并覆盖</Button>
+                    </div>
+                    <input
+                      ref="importFileInput"
+                      type="file"
+                      accept=".json,application/json"
+                      style="display:none"
+                      @change="handleImportFile"
+                    />
+                    <p style="margin:10px 0 0;color:var(--text-secondary);font-size:13px;">
+                      导入会覆盖当前所有数据，建议先导出备份。
+                    </p>
+                  </div>
+                </Card>
+
+                <Card color="app-red" style="margin-top:20px;">
+                  <div class="form-field">
+                    <label class="form-field-label">清除所有数据</label>
+                    <p style="margin:0 0 10px;color:var(--text);font-size:14px;line-height:1.6;">
+                      清空体重、学习、赚钱和时间线记录。此操作不可恢复，请先导出备份。
+                    </p>
+                    <Button type="primary" size="middle" @click="clearAllModalOpen = true">清空全部数据</Button>
+                  </div>
+                </Card>
               </div>
             </template>
           </Tabs>
@@ -728,12 +994,13 @@ const statusText = (status: string) => (status === 'done' ? '完成' : status ==
               <li><b>学习</b>：添加学习项目并跟踪进度。</li>
               <li><b>赚钱</b>：管理任务和收入状态。</li>
               <li><b>今日动态</b>：回顾一天的时间线。</li>
+              <li><b>导入导出</b>：备份和恢复本地数据。</li>
             </ul>
           </Collapse>
         </div>
 
         <Divider type="wave-yellow" />
-        <Footer type="sea" />
+        <Footer type="tree" />
       </div>
 
       <Modal
@@ -746,6 +1013,24 @@ const statusText = (status: string) => (status === 'done' ? '完成' : status ==
       </Modal>
 
       <Modal
+        v-model:open="importConfirmModalOpen"
+        title="确认导入"
+        :typewriter="false"
+        @ok="executeImport"
+      >
+        导入会覆盖当前所有数据，确定要继续吗？建议先导出备份哦~
+      </Modal>
+
+      <Modal
+        v-model:open="clearAllModalOpen"
+        title="确认清空"
+        :typewriter="false"
+        @ok="executeClearAll"
+      >
+        确定要清空所有数据吗？此操作不可恢复，建议先导出备份哦~
+      </Modal>
+
+      <Modal
         v-model:open="studyModalOpen"
         title="添加学习项"
         :typewriter="false"
@@ -754,7 +1039,7 @@ const statusText = (status: string) => (status === 'done' ? '完成' : status ==
         <div style="display:flex;flex-direction:column;gap:16px;">
           <div class="form-field">
             <label class="form-field-label">类型</label>
-            <Radio v-model="studyForm.type" :options="studyTypeOptions" direction="horizontal" size="small" />
+            <Radio v-model="studyForm.type" :options="studyTypeOptions" direction="horizontal" size="middle" />
           </div>
           <div class="form-field">
             <label class="form-field-label">学习项目名称</label>
@@ -776,9 +1061,9 @@ const statusText = (status: string) => (status === 'done' ? '完成' : status ==
             </div>
             <div class="form-field">
               <label class="form-field-label">进度</label>
-              <div style="display:flex;align-items:center;gap:6px;justify-content:center;background:var(--bg-content);border:2px solid var(--border);border-radius:50px;height:40px;padding:0 14px;">
+              <div style="display:flex;align-items:center;gap:8px;justify-content:center;background:var(--bg-content);border:2px solid var(--border);border-radius:50px;height:44px;padding:0 16px;">
                 <span style="font-weight:800;color:var(--text);">{{ computedVideoProgress }}</span>
-                <span style="font-size:12px;color:var(--text-secondary);">%</span>
+                <span style="font-size:13px;color:var(--text-secondary);">%</span>
               </div>
             </div>
           </template>
@@ -802,9 +1087,9 @@ const statusText = (status: string) => (status === 'done' ? '完成' : status ==
             </div>
             <div class="form-field">
               <label class="form-field-label">进度</label>
-              <div style="display:flex;align-items:center;gap:6px;justify-content:center;background:var(--bg-content);border:2px solid var(--border);border-radius:50px;height:40px;padding:0 14px;">
+              <div style="display:flex;align-items:center;gap:8px;justify-content:center;background:var(--bg-content);border:2px solid var(--border);border-radius:50px;height:44px;padding:0 16px;">
                 <span style="font-weight:800;color:var(--text);">{{ computedBookProgress }}</span>
-                <span style="font-size:12px;color:var(--text-secondary);">%</span>
+                <span style="font-size:13px;color:var(--text-secondary);">%</span>
               </div>
             </div>
           </template>
@@ -853,9 +1138,9 @@ const statusText = (status: string) => (status === 'done' ? '完成' : status ==
             </div>
             <div class="form-field">
               <label class="form-field-label">进度</label>
-              <div style="display:flex;align-items:center;gap:6px;justify-content:center;background:var(--bg-content);border:2px solid var(--border);border-radius:50px;height:40px;padding:0 14px;">
+              <div style="display:flex;align-items:center;gap:8px;justify-content:center;background:var(--bg-content);border:2px solid var(--border);border-radius:50px;height:44px;padding:0 16px;">
                 <span style="font-weight:800;color:var(--text);">{{ Math.min(100, Math.round((Number(editVideoLesson)||0) / (Number(editVideoTotalLesson)||1) * 100)) }}</span>
-                <span style="font-size:12px;color:var(--text-secondary);">%</span>
+                <span style="font-size:13px;color:var(--text-secondary);">%</span>
               </div>
             </div>
           </template>
@@ -886,9 +1171,9 @@ const statusText = (status: string) => (status === 'done' ? '完成' : status ==
             </div>
             <div class="form-field">
               <label class="form-field-label">进度</label>
-              <div style="display:flex;align-items:center;gap:6px;justify-content:center;background:var(--bg-content);border:2px solid var(--border);border-radius:50px;height:40px;padding:0 14px;">
+              <div style="display:flex;align-items:center;gap:8px;justify-content:center;background:var(--bg-content);border:2px solid var(--border);border-radius:50px;height:44px;padding:0 16px;">
                 <span style="font-weight:800;color:var(--text);">{{ Math.min(100, Math.round((Number(editBookPage)||0) / (Number(editBookTotalPage)||1) * 100)) }}</span>
-                <span style="font-size:12px;color:var(--text-secondary);">%</span>
+                <span style="font-size:13px;color:var(--text-secondary);">%</span>
               </div>
             </div>
           </template>
@@ -917,7 +1202,8 @@ const statusText = (status: string) => (status === 'done' ? '完成' : status ==
           </div>
           <div class="form-field">
             <label class="form-field-label">截止日期</label>
-            <Input v-model="moneyForm.deadline" placeholder="截止日期" style="width:100%;" />
+            <Input v-model="moneyForm.deadline" placeholder="YYYYMMDD 或 YYYY-MM-DD" style="width:100%;" />
+            <div v-if="moneyDeadlineError" class="form-field-error">{{ moneyDeadlineError }}</div>
           </div>
           <div class="form-field">
             <label class="form-field-label">状态</label>
@@ -955,7 +1241,8 @@ const statusText = (status: string) => (status === 'done' ? '完成' : status ==
           </div>
           <div class="form-field">
             <label class="form-field-label">截止日期</label>
-            <Input v-model="editMoneyForm.deadline" placeholder="截止日期" style="width:100%;" />
+            <Input v-model="editMoneyForm.deadline" placeholder="YYYYMMDD 或 YYYY-MM-DD" style="width:100%;" />
+            <div v-if="editMoneyDeadlineError" class="form-field-error">{{ editMoneyDeadlineError }}</div>
           </div>
           <div class="form-field">
             <label class="form-field-label">状态</label>
@@ -980,7 +1267,7 @@ const statusText = (status: string) => (status === 'done' ? '完成' : status ==
         :open="detailDrawerOpen"
         title="学习详情"
         placement="bottom"
-        height="360"
+        height="400"
         @close="detailDrawerOpen = false"
       >
         <div v-if="detailRecord" class="drawer-detail">
@@ -1037,6 +1324,7 @@ const statusText = (status: string) => (status === 'done' ? '完成' : status ==
         </div>
       </Drawer>
     </div>
+    <NotificationContainer />
   </Cursor>
 </template>
 
@@ -1061,23 +1349,23 @@ const statusText = (status: string) => (status === 'done' ? '完成' : status ==
 
 .health-stack {
   display: flex;
-  flex-direction: row;
-  gap: 20px;
+  flex-wrap: wrap;
+  gap: 24px;
 }
 .health-stack > div {
-  flex: 1 1 0;
+  flex: 1 1 480px;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
-.health-stack .chart-wrap {
-  height: 300px;
+.health-card {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
 }
-@media (max-width: 900px) {
-  .health-stack {
-    flex-direction: column;
-  }
-  .health-stack > div {
-    flex: 1 1 auto;
-  }
+.health-card .chart-wrap {
+  flex: 1 1 auto;
+  min-height: 260px;
 }
 
 .detail-clickable {
@@ -1090,24 +1378,30 @@ const statusText = (status: string) => (status === 'done' ? '完成' : status ==
 .form-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 .form-field-label {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--text-secondary);
 }
+.form-field-error {
+  font-size: 12px;
+  color: var(--error);
+  font-weight: 700;
+  margin-top: 2px;
+}
 .drawer-detail {
-  padding: 8px 4px;
+  padding: 10px 6px;
 }
 .drawer-detail-head {
   display: flex;
   align-items: center;
-  gap: 16px;
-  margin-bottom: 20px;
+  gap: 18px;
+  margin-bottom: 24px;
 }
 .drawer-detail-title {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 800;
   color: var(--text);
   margin-bottom: 6px;
@@ -1115,14 +1409,14 @@ const statusText = (status: string) => (status === 'done' ? '完成' : status ==
 .drawer-detail-section {
   background: var(--bg-content);
   border: 2px solid var(--border);
-  border-radius: 16px;
-  padding: 16px;
-  margin-bottom: 14px;
+  border-radius: 18px;
+  padding: 18px;
+  margin-bottom: 16px;
   color: var(--text);
-  line-height: 1.7;
+  line-height: 1.8;
 }
 .drawer-detail-label {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--text-secondary);
   margin-bottom: 4px;
@@ -1136,6 +1430,17 @@ const statusText = (status: string) => (status === 'done' ? '完成' : status ==
 }
 .drawer-detail-link:hover {
   color: #1a4d8a;
+}
+
+.corner-sun {
+  position: fixed;
+  top: -120px;
+  right: -120px;
+  width: 360px;
+  height: auto;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.92;
 }
 
 /* ============ Animal Crossing dynamic background ============ */
