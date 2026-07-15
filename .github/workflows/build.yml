@@ -25,10 +25,6 @@ jobs:
             script: electron:build:mac
             artifact: MyDay-macOS
             path: MyDay/release/*.dmg
-          - os: ubuntu-latest
-            script: electron:build:linux
-            artifact: MyDay-Linux
-            path: MyDay/release/*.AppImage
 
     steps:
       - name: Checkout MyDay

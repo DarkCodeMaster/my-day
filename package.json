@@ -12,7 +12,6 @@
     "electron:build": "npm run build && electron-builder",
     "electron:build:win": "npm run build && electron-builder --win",
     "electron:build:mac": "npm run build && electron-builder --mac",
-    "electron:build:linux": "npm run build && electron-builder --linux",
     "electron:preview": "npm run build && electron ."
   },
   "dependencies": {
@@ -48,8 +47,6 @@
     "mac": {
       "target": "dmg"
     },
-    "linux": {
-      "target": "AppImage"
-    }
+    "publish": null
   }
 }
