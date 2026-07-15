@@ -4,6 +4,7 @@ import {
   Button,
   Input,
   Radio,
+  Switch,
   Card,
   Title,
   Tabs,
@@ -16,10 +17,11 @@ import {
   Time,
   Divider,
   Footer,
-  Phone,
   Cursor,
   Typewriter,
   Icon,
+  Drawer,
+  Wallet,
 } from 'animal-island-vue';
 import type { SelectOption, RadioOption } from 'animal-island-vue';
 import { useMyDayStorage } from '@/composables/useMyDayStorage';
@@ -53,11 +55,11 @@ onMounted(() => {
   }
   if (!studyItems.length) {
     studyItems.push(
-      { id: 1, type: 'video', name: 'Vue 3 进阶实战', image: '#19c8b9', abbr: 'Vue', progress: 75, link: 'example.com/vue', lesson: 12 },
-      { id: 2, type: 'book', name: '原子习惯', image: '#f8a6b2', abbr: '原子', progress: 45, chapter: 4, page: 128 },
+      { id: 1, type: 'video', name: 'Vue 3 进阶实战', image: '#19c8b9', abbr: 'Vue', progress: 75, link: 'example.com/vue', lesson: 12, totalLesson: 16 },
+      { id: 2, type: 'book', name: '原子习惯', image: '#f8a6b2', abbr: '原子', progress: 45, chapter: 4, totalChapter: 10, page: 128, totalPage: 280 },
       { id: 3, type: 'skill', name: '吉他指弹', image: '#82d5bb', abbr: '吉他', progress: 30, notes: '练习 C 大调音阶' },
-      { id: 4, type: 'video', name: 'TypeScript 全栈', image: '#889df0', abbr: 'TS', progress: 20, link: 'example.com/ts', lesson: 3 },
-      { id: 5, type: 'book', name: '深度工作', image: '#f7cd67', abbr: '深度', progress: 60, chapter: 2, page: 85 }
+      { id: 4, type: 'video', name: 'TypeScript 全栈', image: '#889df0', abbr: 'TS', progress: 20, link: 'example.com/ts', lesson: 3, totalLesson: 15 },
+      { id: 5, type: 'book', name: '深度工作', image: '#f7cd67', abbr: '深度', progress: 60, chapter: 2, totalChapter: 8, page: 85, totalPage: 260 }
     );
   }
   if (!moneyItems.length) {
@@ -191,6 +193,7 @@ const chartComputed = computed(() => {
 
 /* ==================== Study ==================== */
 const studyType = ref('all');
+const showCompletedStudy = ref(false);
 const studyRadio: RadioOption[] = [
   { label: '全部', value: 'all' },
   { label: '视频', value: 'video' },
@@ -199,9 +202,9 @@ const studyRadio: RadioOption[] = [
 ];
 const studyCols: any[] = [
   { title: '项目', dataIndex: 'name' },
-  { title: '类型', dataIndex: 'type', width: '80px' },
+  { title: '类型', dataIndex: 'type', width: '80px', align: 'center' },
   { title: '进度', dataIndex: 'progress', width: '140px' },
-  { title: '详情', dataIndex: 'detail' },
+  { title: '详情', dataIndex: 'detail', width: '220px' },
   { title: '操作', dataIndex: 'action', width: '80px', align: 'center' },
 ];
 const studyTypeOptions: RadioOption[] = [
@@ -216,8 +219,11 @@ const studyForm = reactive({
   progress: '',
   link: '',
   lesson: '',
+  totalLesson: '',
   chapter: '',
+  totalChapter: '',
   page: '',
+  totalPage: '',
   notes: '',
 });
 const resetStudyForm = () => {
@@ -226,36 +232,123 @@ const resetStudyForm = () => {
   studyForm.progress = '';
   studyForm.link = '';
   studyForm.lesson = '';
+  studyForm.totalLesson = '';
   studyForm.chapter = '';
+  studyForm.totalChapter = '';
   studyForm.page = '';
+  studyForm.totalPage = '';
   studyForm.notes = '';
 };
-const filteredStudy = computed(() =>
-  studyType.value === 'all' ? studyItems : studyItems.filter((s: StudyItem) => s.type === studyType.value)
-);
+const computedBookProgress = computed(() => {
+  const total = Number(studyForm.totalPage) || 0;
+  const page = Number(studyForm.page) || 0;
+  if (total <= 0) return 0;
+  return Math.min(100, Math.round((page / total) * 100));
+});
+const computedVideoProgress = computed(() => {
+  const total = Number(studyForm.totalLesson) || 0;
+  const lesson = Number(studyForm.lesson) || 0;
+  if (total <= 0) return 0;
+  return Math.min(100, Math.round((lesson / total) * 100));
+});
+
+const filteredStudy = computed(() => {
+  let list = studyType.value === 'all' ? studyItems : studyItems.filter((s: StudyItem) => s.type === studyType.value);
+  if (!showCompletedStudy.value) {
+    list = list.filter((s: StudyItem) => s.progress < 100);
+  }
+  return list;
+});
 const addStudy = () => {
   const name = studyForm.name.trim();
   if (!name) return;
-  const progress = Math.min(100, Math.max(0, Number(studyForm.progress) || 0));
   const item: StudyItem = {
     id: Date.now(),
     type: studyForm.type as StudyItem['type'],
     name,
     image: studyColorMap[studyForm.type],
     abbr: name.slice(0, 2),
-    progress,
+    progress: 0,
   };
   if (studyForm.type === 'video') {
     item.link = studyForm.link.trim();
     item.lesson = Number(studyForm.lesson) || 0;
+    item.totalLesson = Number(studyForm.totalLesson) || 0;
+    if (item.totalLesson > 0) {
+      item.progress = Math.min(100, Math.round((item.lesson / item.totalLesson) * 100));
+    } else {
+      item.progress = 0;
+    }
   } else if (studyForm.type === 'book') {
     item.chapter = Number(studyForm.chapter) || 0;
+    item.totalChapter = Number(studyForm.totalChapter) || 0;
     item.page = Number(studyForm.page) || 0;
+    item.totalPage = Number(studyForm.totalPage) || 0;
+    if (item.totalPage > 0) {
+      item.progress = Math.min(100, Math.round((item.page / item.totalPage) * 100));
+    } else {
+      item.progress = 0;
+    }
   } else {
     item.notes = studyForm.notes.trim();
+    item.progress = Math.min(100, Math.max(0, Number(studyForm.progress) || 0));
   }
   studyItems.push(item);
   resetStudyForm();
+};
+
+const studyModalOpen = ref(false);
+const openStudyModal = () => {
+  resetStudyForm();
+  studyModalOpen.value = true;
+};
+const submitStudy = () => {
+  if (!studyForm.name.trim()) return;
+  addStudy();
+  studyModalOpen.value = false;
+};
+
+const editStudyModalOpen = ref(false);
+const editStudyTarget = ref<StudyItem | null>(null);
+const editProgress = ref('');
+const editBookChapter = ref('');
+const editBookTotalChapter = ref('');
+const editBookPage = ref('');
+const editBookTotalPage = ref('');
+const editVideoLesson = ref('');
+const editVideoTotalLesson = ref('');
+const openEditStudy = (record: StudyItem) => {
+  editStudyTarget.value = record;
+  editProgress.value = String(record.progress);
+  editBookChapter.value = String(record.chapter ?? '');
+  editBookTotalChapter.value = String(record.totalChapter ?? '');
+  editBookPage.value = String(record.page ?? '');
+  editBookTotalPage.value = String(record.totalPage ?? '');
+  editVideoLesson.value = String(record.lesson ?? '');
+  editVideoTotalLesson.value = String(record.totalLesson ?? '');
+  editStudyModalOpen.value = true;
+};
+const submitEditStudy = () => {
+  if (!editStudyTarget.value) return;
+  const record = editStudyTarget.value;
+  if (record.type === 'book') {
+    record.chapter = Number(editBookChapter.value) || 0;
+    record.totalChapter = Number(editBookTotalChapter.value) || 0;
+    record.page = Number(editBookPage.value) || 0;
+    record.totalPage = Number(editBookTotalPage.value) || 0;
+    if (record.totalPage > 0) {
+      record.progress = Math.min(100, Math.round((record.page / record.totalPage) * 100));
+    }
+  } else if (record.type === 'video') {
+    record.lesson = Number(editVideoLesson.value) || 0;
+    record.totalLesson = Number(editVideoTotalLesson.value) || 0;
+    if (record.totalLesson > 0) {
+      record.progress = Math.min(100, Math.round((record.lesson / record.totalLesson) * 100));
+    }
+  } else {
+    record.progress = Math.min(100, Math.max(0, Number(editProgress.value) || 0));
+  }
+  editStudyModalOpen.value = false;
 };
 
 /* ==================== Money ==================== */
@@ -264,8 +357,8 @@ const moneyCols: any[] = [
   { title: '金额', dataIndex: 'amount', width: '100px', align: 'right' },
   { title: '截止', dataIndex: 'deadline', width: '110px' },
   { title: '进度', dataIndex: 'progress', width: '140px' },
-  { title: '状态', dataIndex: 'status', width: '100px' },
-  { title: '操作', dataIndex: 'action', width: '80px', align: 'center' },
+  { title: '状态', dataIndex: 'status', width: '90px' },
+  { title: '操作', dataIndex: 'action', width: '110px', align: 'center' },
 ];
 const moneyStatusOptions: SelectOption[] = [
   { key: 'pending', label: '未完成' },
@@ -277,26 +370,61 @@ const moneyForm = reactive({
   amount: '',
   deadline: '',
   status: 'pending',
+  progress: '',
 });
-const addMoney = () => {
+const resetMoneyForm = () => {
+  moneyForm.desc = '';
+  moneyForm.amount = '';
+  moneyForm.deadline = '';
+  moneyForm.status = 'pending';
+  moneyForm.progress = '';
+};
+const moneyModalOpen = ref(false);
+const openMoneyModal = () => {
+  resetMoneyForm();
+  moneyModalOpen.value = true;
+};
+const submitMoney = () => {
   if (!moneyForm.desc || !moneyForm.amount) return;
   moneyItems.push({
     id: Date.now(),
     desc: moneyForm.desc,
     amount: Number(moneyForm.amount),
     deadline: moneyForm.deadline || todayStr(),
-    progress: 0,
+    progress: Math.min(100, Math.max(0, Number(moneyForm.progress) || 0)),
     status: moneyForm.status as MoneyItem['status'],
   });
-  moneyForm.desc = '';
-  moneyForm.amount = '';
-  moneyForm.deadline = '';
-  moneyForm.status = 'pending';
+  resetMoneyForm();
+  moneyModalOpen.value = false;
 };
-const toggleMoneyStatus = (row: MoneyItem) => {
-  const order: Record<MoneyItem['status'], MoneyItem['status']> = { pending: 'done', done: 'paused', paused: 'pending' };
-  row.status = order[row.status];
-  if (row.status === 'done') row.progress = 100;
+const editMoneyModalOpen = ref(false);
+const editMoneyTarget = ref<MoneyItem | null>(null);
+const editMoneyForm = reactive({
+  desc: '',
+  amount: '',
+  deadline: '',
+  status: 'pending',
+  progress: '',
+});
+const openEditMoney = (record: MoneyItem) => {
+  editMoneyTarget.value = record;
+  editMoneyForm.desc = record.desc;
+  editMoneyForm.amount = String(record.amount);
+  editMoneyForm.deadline = record.deadline;
+  editMoneyForm.status = record.status;
+  editMoneyForm.progress = String(record.progress);
+  editMoneyModalOpen.value = true;
+};
+const submitEditMoney = () => {
+  if (!editMoneyTarget.value) return;
+  const record = editMoneyTarget.value;
+  record.desc = editMoneyForm.desc.trim();
+  record.amount = Number(editMoneyForm.amount) || 0;
+  record.deadline = editMoneyForm.deadline || todayStr();
+  record.status = editMoneyForm.status as MoneyItem['status'];
+  record.progress = Math.min(100, Math.max(0, Number(editMoneyForm.progress) || 0));
+  if (record.status === 'done') record.progress = 100;
+  editMoneyModalOpen.value = false;
 };
 const totalIncome = computed(() => moneyItems.filter((m: MoneyItem) => m.status === 'done').reduce((s, m) => s + m.amount, 0));
 const pendingIncome = computed(() =>
@@ -326,6 +454,19 @@ const confirmDelete = () => {
   deleteModalOpen.value = false;
 };
 
+/* ==================== Detail Drawer ==================== */
+const detailDrawerOpen = ref(false);
+const detailRecord = ref<StudyItem | null>(null);
+const openDetail = (record: StudyItem) => {
+  detailRecord.value = record;
+  detailDrawerOpen.value = true;
+};
+const normalizeLink = (url?: string) => {
+  if (!url) return '#';
+  if (/^https?:\/\//i.test(url)) return url;
+  return `https://${url}`;
+};
+
 /* ==================== Helpers ==================== */
 const studyTypeText = (type: string) => (type === 'video' ? '视频' : type === 'book' ? '书籍' : '技能');
 const statusText = (status: string) => (status === 'done' ? '完成' : status === 'pending' ? '未完成' : '暂停');
@@ -334,7 +475,18 @@ const statusText = (status: string) => (status === 'done' ? '完成' : status ==
 <template>
   <Cursor>
     <div class="page-root">
-      <Loading :active="!isLoaded" style="position: absolute; inset: 0; z-index: 999;" />
+      <div class="ac-background" aria-hidden="true">
+        <div class="ac-bg-sky"></div>
+        <div class="ac-cloud cloud-1"></div>
+        <div class="ac-cloud cloud-2"></div>
+        <div class="ac-cloud cloud-3"></div>
+        <div class="ac-leaf leaf-1">🌿</div>
+        <div class="ac-leaf leaf-2">🍃</div>
+        <div class="ac-leaf leaf-3">🌿</div>
+        <div class="ac-leaf leaf-4">🍃</div>
+        <div class="ac-leaf leaf-5">🌿</div>
+      </div>
+      <Loading :active="!isLoaded" style="position: fixed; inset: 0; z-index: 9999;" />
 
       <div class="page">
         <header class="page-header">
@@ -357,13 +509,13 @@ const statusText = (status: string) => (status === 'done' ? '完成' : status ==
           <Tabs v-model="activeTab" :items="tabItems" :shadow="true" :leaf-animation="true">
             <!-- 健康 -->
             <template #health>
-              <div class="two-col">
+              <div class="health-stack">
                 <div>
                   <div class="panel-title">
                     <span class="dot"></span>
                     <Title color="app-green" size="middle">体重日历</Title>
                   </div>
-                  <Card color="app-green">
+                  <Card>
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
                       <Button type="default" size="small" @click="prevMonth">‹</Button>
                       <span style="font-weight:800;color:var(--text);">{{ monthLabel }}</span>
@@ -399,7 +551,7 @@ const statusText = (status: string) => (status === 'done' ? '完成' : status ==
                     <span class="dot"></span>
                     <Title color="app-teal" size="middle">趋势曲线</Title>
                   </div>
-                  <Card color="app-teal">
+                  <Card>
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
                       <span style="font-weight:700;color:var(--text);">体重变化趋势</span>
                       <Select v-model="chartRange" :options="chartOptions" />
@@ -427,43 +579,18 @@ const statusText = (status: string) => (status === 'done' ? '完成' : status ==
             <!-- 学习 -->
             <template #study>
               <div class="section">
-                <div class="panel-title">
-                  <span class="dot"></span>
-                  <Title color="app-blue" size="middle">添加学习项</Title>
-                </div>
-                <Card color="app-blue">
-                  <div style="display:flex;flex-direction:column;gap:14px;">
-                    <div class="form-row">
-                      <Radio v-model="studyForm.type" :options="studyTypeOptions" direction="horizontal" size="small" />
-                    </div>
-                    <div class="form-row">
-                      <Input v-model="studyForm.name" placeholder="学习项目名称" style="flex:1;min-width:160px;" />
-                      <Input v-model="studyForm.progress" placeholder="进度 0-100" style="width:120px;">
-                        <template #suffix>%</template>
-                      </Input>
-                    </div>
-                    <div v-if="studyForm.type === 'video'" class="form-row">
-                      <Input v-model="studyForm.link" placeholder="课程链接" style="flex:1;min-width:160px;" />
-                      <Input v-model="studyForm.lesson" placeholder="第几课" style="width:100px;" />
-                    </div>
-                    <div v-if="studyForm.type === 'book'" class="form-row">
-                      <Input v-model="studyForm.chapter" placeholder="第几章" style="width:100px;" />
-                      <Input v-model="studyForm.page" placeholder="第几页" style="width:100px;" />
-                    </div>
-                    <div v-if="studyForm.type === 'skill'" class="form-row">
-                      <Input v-model="studyForm.notes" placeholder="备注，例如练习目标" style="flex:1;min-width:200px;" />
-                    </div>
-                    <div class="form-row" style="justify-content:flex-end;">
-                      <Button type="primary" size="middle" @click="addStudy">添加学习项</Button>
-                    </div>
-                  </div>
-                </Card>
-              </div>
-
-              <div class="section">
                 <div class="section-head">
-                  <Title color="app-blue" size="middle">学习进度表</Title>
-                  <Radio v-model="studyType" :options="studyRadio" size="small" direction="horizontal" />
+                  <div style="display:flex;align-items:center;gap:16px;">
+                    <Title color="app-blue" size="middle">学习进度表</Title>
+                    <Switch v-model="showCompletedStudy" class="study-switch">
+                      <template #checked>显示已完成</template>
+                      <template #unchecked>隐藏已完成</template>
+                    </Switch>
+                  </div>
+                  <div class="form-row">
+                    <Radio v-model="studyType" :options="studyRadio" size="small" direction="horizontal" />
+                    <Button type="primary" size="middle" @click="openStudyModal">添加学习项</Button>
+                  </div>
                 </div>
                 <Table :columns="studyCols" :data-source="filteredStudy" row-key="id" :striped="true">
                   <template #cell-name="{ record }">
@@ -489,12 +616,15 @@ const statusText = (status: string) => (status === 'done' ? '完成' : status ==
                     </div>
                   </template>
                   <template #cell-detail="{ record }">
-                    <div v-if="record.type === 'video'" class="cell-meta">课程链接：{{ record.link }} · 第 {{ record.lesson }} 课</div>
-                    <div v-else-if="record.type === 'book'" class="cell-meta">第 {{ record.chapter }} 章 · 第 {{ record.page }} 页</div>
-                    <div v-else class="cell-meta">{{ record.notes }}</div>
+                    <div v-if="record.type === 'video'" class="cell-meta detail-clickable" @click="openDetail(record)">第 {{ record.lesson }} / {{ record.totalLesson }} 课</div>
+                    <div v-else-if="record.type === 'book'" class="cell-meta detail-clickable" @click="openDetail(record)">第 {{ record.chapter }} / {{ record.totalChapter }} 章 · 第 {{ record.page }} / {{ record.totalPage }} 页</div>
+                    <div v-else class="cell-meta detail-clickable" @click="openDetail(record)">{{ record.notes }}</div>
                   </template>
                   <template #cell-action="{ record }">
-                    <Button type="text" size="small" danger @click="openDelete('study', record.id)">删除</Button>
+                    <div style="display:flex;gap:6px;justify-content:center;">
+                      <Button type="text" size="small" @click="openEditStudy(record)">编辑</Button>
+                      <Button type="text" size="small" @click="openDelete('study', record.id)">删除</Button>
+                    </div>
                   </template>
                 </Table>
               </div>
@@ -505,32 +635,33 @@ const statusText = (status: string) => (status === 'done' ? '完成' : status ==
               <div class="summary-grid">
                 <Card color="app-yellow">
                   <div class="summary-label">已到账收入</div>
-                  <div class="summary-value">¥{{ totalIncome }}</div>
+                  <Wallet class="summary-wallet" :value="totalIncome" size="large" />
                 </Card>
                 <Card color="app-orange">
                   <div class="summary-label">进行中预估</div>
-                  <div class="summary-value">¥{{ Math.round(pendingIncome) }}</div>
+                  <Wallet class="summary-wallet" :value="Math.round(pendingIncome)" size="large" />
                 </Card>
                 <Card color="app-pink">
-                  <div class="summary-label">总任务数</div>
-                  <div class="summary-value">{{ moneyItems.length }}</div>
+                  <div class="summary-count-card">
+                    <div class="summary-label">总任务数</div>
+                    <div class="summary-value">{{ moneyItems.length }}</div>
+                  </div>
                 </Card>
               </div>
+
+              <Divider type="dashed-brown" />
 
               <div class="section">
                 <div class="section-head">
                   <Title color="app-yellow" size="middle">赚钱任务表</Title>
-                  <div class="form-row">
-                    <Input v-model="moneyForm.desc" size="small" placeholder="业务描述" style="width:180px" />
-                    <Input v-model="moneyForm.amount" size="small" placeholder="金额" style="width:90px" />
-                    <Input v-model="moneyForm.deadline" size="small" placeholder="截止日期" style="width:120px" />
-                    <Select v-model="moneyForm.status" :options="moneyStatusOptions" />
-                    <Button type="primary" size="small" @click="addMoney">添加</Button>
-                  </div>
+                  <Button type="primary" size="middle" @click="openMoneyModal">添加任务</Button>
                 </div>
                 <Table :columns="moneyCols" :data-source="moneyItems" row-key="id" :striped="true">
                   <template #cell-amount="{ record }">
                     <span style="font-weight:800;">¥{{ record.amount }}</span>
+                  </template>
+                  <template #cell-deadline="{ record }">
+                    <span style="white-space: nowrap;">{{ record.deadline }}</span>
                   </template>
                   <template #cell-progress="{ record }">
                     <div style="font-weight:700;color:var(--text);">{{ record.progress }}%</div>
@@ -539,14 +670,15 @@ const statusText = (status: string) => (status === 'done' ? '完成' : status ==
                     </div>
                   </template>
                   <template #cell-status="{ record }">
-                    <Tooltip title="点击切换状态" placement="top">
-                      <span class="status-badge" :class="record.status" @click="toggleMoneyStatus(record)" style="cursor:pointer;">
-                        {{ statusText(record.status) }}
-                      </span>
-                    </Tooltip>
+                    <span class="status-badge" :class="record.status">
+                      {{ statusText(record.status) }}
+                    </span>
                   </template>
                   <template #cell-action="{ record }">
-                    <Button type="text" size="small" danger @click="openDelete('money', record.id)">删除</Button>
+                    <div style="display:flex;gap:6px;justify-content:center;">
+                      <Button type="text" size="small" @click="openEditMoney(record)">编辑</Button>
+                      <Button type="text" size="small" @click="openDelete('money', record.id)">删除</Button>
+                    </div>
                   </template>
                 </Table>
               </div>
@@ -560,7 +692,7 @@ const statusText = (status: string) => (status === 'done' ? '完成' : status ==
                     <span class="dot"></span>
                     <Title color="app-pink" size="middle">今日时间线</Title>
                   </div>
-                  <Card color="app-pink">
+                  <Card>
                     <div class="timeline">
                       <div v-for="(log, i) in todayLogs" :key="i" class="timeline-item">
                         <span class="timeline-dot" :class="log.category"></span>
@@ -583,10 +715,6 @@ const statusText = (status: string) => (status === 'done' ? '完成' : status ==
                       <b>{{ moneyItems.filter((m: MoneyItem) => m.status === 'done').length }}</b> 个。继续加油 🌿
                     </p>
                   </Card>
-
-                  <div class="phone-decoration">
-                    <Phone />
-                  </div>
                 </div>
               </div>
             </template>
@@ -616,6 +744,298 @@ const statusText = (status: string) => (status === 'done' ? '完成' : status ==
       >
         确定要删除这条记录吗？动森的世界里也要学会断舍离哦~
       </Modal>
+
+      <Modal
+        v-model:open="studyModalOpen"
+        title="添加学习项"
+        :typewriter="false"
+        :show-footer="true"
+      >
+        <div style="display:flex;flex-direction:column;gap:16px;">
+          <div class="form-field">
+            <label class="form-field-label">类型</label>
+            <Radio v-model="studyForm.type" :options="studyTypeOptions" direction="horizontal" size="small" />
+          </div>
+          <div class="form-field">
+            <label class="form-field-label">学习项目名称</label>
+            <Input v-model="studyForm.name" placeholder="学习项目名称" style="width:100%;" />
+          </div>
+
+          <template v-if="studyForm.type === 'video'">
+            <div class="form-field">
+              <label class="form-field-label">课程链接</label>
+              <Input v-model="studyForm.link" placeholder="课程链接" style="width:100%;" />
+            </div>
+            <div class="form-field">
+              <label class="form-field-label">总课程数</label>
+              <Input v-model="studyForm.totalLesson" placeholder="总课程数" style="width:100%;" />
+            </div>
+            <div class="form-field">
+              <label class="form-field-label">当前第几课</label>
+              <Input v-model="studyForm.lesson" placeholder="当前第几课" style="width:100%;" />
+            </div>
+            <div class="form-field">
+              <label class="form-field-label">进度</label>
+              <div style="display:flex;align-items:center;gap:6px;justify-content:center;background:var(--bg-content);border:2px solid var(--border);border-radius:50px;height:40px;padding:0 14px;">
+                <span style="font-weight:800;color:var(--text);">{{ computedVideoProgress }}</span>
+                <span style="font-size:12px;color:var(--text-secondary);">%</span>
+              </div>
+            </div>
+          </template>
+
+          <template v-else-if="studyForm.type === 'book'">
+            <div class="form-field">
+              <label class="form-field-label">第几章</label>
+              <Input v-model="studyForm.chapter" placeholder="第几章" style="width:100%;" />
+            </div>
+            <div class="form-field">
+              <label class="form-field-label">总章节数</label>
+              <Input v-model="studyForm.totalChapter" placeholder="总章节数" style="width:100%;" />
+            </div>
+            <div class="form-field">
+              <label class="form-field-label">当前页</label>
+              <Input v-model="studyForm.page" placeholder="当前页" style="width:100%;" />
+            </div>
+            <div class="form-field">
+              <label class="form-field-label">总页数</label>
+              <Input v-model="studyForm.totalPage" placeholder="总页数" style="width:100%;" />
+            </div>
+            <div class="form-field">
+              <label class="form-field-label">进度</label>
+              <div style="display:flex;align-items:center;gap:6px;justify-content:center;background:var(--bg-content);border:2px solid var(--border);border-radius:50px;height:40px;padding:0 14px;">
+                <span style="font-weight:800;color:var(--text);">{{ computedBookProgress }}</span>
+                <span style="font-size:12px;color:var(--text-secondary);">%</span>
+              </div>
+            </div>
+          </template>
+
+          <template v-else>
+            <div class="form-field">
+              <label class="form-field-label">进度</label>
+              <Input v-model="studyForm.progress" placeholder="进度 0-100" style="width:100%;">
+                <template #suffix>%</template>
+              </Input>
+            </div>
+            <div class="form-field">
+              <label class="form-field-label">备注</label>
+              <Input v-model="studyForm.notes" placeholder="备注，例如练习目标" style="width:100%;" />
+            </div>
+          </template>
+        </div>
+        <template #footer>
+          <div style="display:flex;justify-content:flex-end;gap:12px;">
+            <Button type="primary" size="middle" @click="studyModalOpen = false">取消</Button>
+            <Button type="primary" size="middle" @click="submitStudy">添加</Button>
+          </div>
+        </template>
+      </Modal>
+
+      <Modal
+        v-model:open="editStudyModalOpen"
+        title="更新进度"
+        :typewriter="false"
+        :show-footer="true"
+      >
+        <div style="display:flex;flex-direction:column;gap:16px;">
+          <div class="form-field">
+            <label class="form-field-label">项目名称</label>
+            <div style="font-weight:700;color:var(--text);">{{ editStudyTarget?.name }}</div>
+          </div>
+
+          <template v-if="editStudyTarget?.type === 'video'">
+            <div class="form-field">
+              <label class="form-field-label">总课程数</label>
+              <Input v-model="editVideoTotalLesson" placeholder="总课程数" style="width:100%;" />
+            </div>
+            <div class="form-field">
+              <label class="form-field-label">当前第几课</label>
+              <Input v-model="editVideoLesson" placeholder="当前第几课" style="width:100%;" />
+            </div>
+            <div class="form-field">
+              <label class="form-field-label">进度</label>
+              <div style="display:flex;align-items:center;gap:6px;justify-content:center;background:var(--bg-content);border:2px solid var(--border);border-radius:50px;height:40px;padding:0 14px;">
+                <span style="font-weight:800;color:var(--text);">{{ Math.min(100, Math.round((Number(editVideoLesson)||0) / (Number(editVideoTotalLesson)||1) * 100)) }}</span>
+                <span style="font-size:12px;color:var(--text-secondary);">%</span>
+              </div>
+            </div>
+          </template>
+
+          <div v-else-if="editStudyTarget?.type !== 'book'" class="form-field">
+            <label class="form-field-label">进度</label>
+            <Input v-model="editProgress" placeholder="进度 0-100" style="width:100%;">
+              <template #suffix>%</template>
+            </Input>
+          </div>
+
+          <template v-else>
+            <div class="form-field">
+              <label class="form-field-label">第几章</label>
+              <Input v-model="editBookChapter" placeholder="第几章" style="width:100%;" />
+            </div>
+            <div class="form-field">
+              <label class="form-field-label">总章节数</label>
+              <Input v-model="editBookTotalChapter" placeholder="总章节数" style="width:100%;" />
+            </div>
+            <div class="form-field">
+              <label class="form-field-label">当前页</label>
+              <Input v-model="editBookPage" placeholder="当前页" style="width:100%;" />
+            </div>
+            <div class="form-field">
+              <label class="form-field-label">总页数</label>
+              <Input v-model="editBookTotalPage" placeholder="总页数" style="width:100%;" />
+            </div>
+            <div class="form-field">
+              <label class="form-field-label">进度</label>
+              <div style="display:flex;align-items:center;gap:6px;justify-content:center;background:var(--bg-content);border:2px solid var(--border);border-radius:50px;height:40px;padding:0 14px;">
+                <span style="font-weight:800;color:var(--text);">{{ Math.min(100, Math.round((Number(editBookPage)||0) / (Number(editBookTotalPage)||1) * 100)) }}</span>
+                <span style="font-size:12px;color:var(--text-secondary);">%</span>
+              </div>
+            </div>
+          </template>
+        </div>
+        <template #footer>
+          <div style="display:flex;justify-content:flex-end;gap:12px;">
+            <Button type="primary" size="middle" @click="editStudyModalOpen = false">取消</Button>
+            <Button type="primary" size="middle" @click="submitEditStudy">保存</Button>
+          </div>
+        </template>
+      </Modal>
+      <Modal
+        v-model:open="moneyModalOpen"
+        title="添加赚钱任务"
+        :typewriter="false"
+        :show-footer="true"
+      >
+        <div style="display:flex;flex-direction:column;gap:16px;">
+          <div class="form-field">
+            <label class="form-field-label">业务描述</label>
+            <Input v-model="moneyForm.desc" placeholder="业务描述" style="width:100%;" />
+          </div>
+          <div class="form-field">
+            <label class="form-field-label">金额</label>
+            <Input v-model="moneyForm.amount" placeholder="金额" style="width:100%;" />
+          </div>
+          <div class="form-field">
+            <label class="form-field-label">截止日期</label>
+            <Input v-model="moneyForm.deadline" placeholder="截止日期" style="width:100%;" />
+          </div>
+          <div class="form-field">
+            <label class="form-field-label">状态</label>
+            <Select v-model="moneyForm.status" :options="moneyStatusOptions" />
+          </div>
+          <div class="form-field">
+            <label class="form-field-label">进度</label>
+            <Input v-model="moneyForm.progress" placeholder="进度 0-100" style="width:100%;">
+              <template #suffix>%</template>
+            </Input>
+          </div>
+        </div>
+        <template #footer>
+          <div style="display:flex;justify-content:flex-end;gap:12px;">
+            <Button type="primary" size="middle" @click="moneyModalOpen = false">取消</Button>
+            <Button type="primary" size="middle" @click="submitMoney">添加</Button>
+          </div>
+        </template>
+      </Modal>
+
+      <Modal
+        v-model:open="editMoneyModalOpen"
+        title="编辑赚钱任务"
+        :typewriter="false"
+        :show-footer="true"
+      >
+        <div style="display:flex;flex-direction:column;gap:16px;">
+          <div class="form-field">
+            <label class="form-field-label">业务描述</label>
+            <Input v-model="editMoneyForm.desc" placeholder="业务描述" style="width:100%;" />
+          </div>
+          <div class="form-field">
+            <label class="form-field-label">金额</label>
+            <Input v-model="editMoneyForm.amount" placeholder="金额" style="width:100%;" />
+          </div>
+          <div class="form-field">
+            <label class="form-field-label">截止日期</label>
+            <Input v-model="editMoneyForm.deadline" placeholder="截止日期" style="width:100%;" />
+          </div>
+          <div class="form-field">
+            <label class="form-field-label">状态</label>
+            <Select v-model="editMoneyForm.status" :options="moneyStatusOptions" />
+          </div>
+          <div class="form-field">
+            <label class="form-field-label">进度</label>
+            <Input v-model="editMoneyForm.progress" placeholder="进度 0-100" style="width:100%;">
+              <template #suffix>%</template>
+            </Input>
+          </div>
+        </div>
+        <template #footer>
+          <div style="display:flex;justify-content:flex-end;gap:12px;">
+            <Button type="primary" size="middle" @click="editMoneyModalOpen = false">取消</Button>
+            <Button type="primary" size="middle" @click="submitEditMoney">保存</Button>
+          </div>
+        </template>
+      </Modal>
+
+      <Drawer
+        :open="detailDrawerOpen"
+        title="学习详情"
+        placement="bottom"
+        height="360"
+        @close="detailDrawerOpen = false"
+      >
+        <div v-if="detailRecord" class="drawer-detail">
+          <div class="drawer-detail-head">
+            <div
+              class="cell-thumb"
+              :style="{ background: detailRecord.image, color: '#fff', textShadow: '0 1px 1px rgba(0,0,0,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '14px' }"
+            >
+              {{ detailRecord.abbr }}
+            </div>
+            <div>
+              <div class="drawer-detail-title">{{ detailRecord.name }}</div>
+              <span class="study-type-badge" :class="detailRecord.type">{{ studyTypeText(detailRecord.type) }}</span>
+            </div>
+          </div>
+
+          <div class="drawer-detail-section">
+            <div class="drawer-detail-label">进度</div>
+            <div style="font-weight:700;color:var(--text);">{{ detailRecord.progress }}%</div>
+            <div class="progress-bar">
+              <div class="progress-bar-fill" :style="{ width: detailRecord.progress + '%' }"></div>
+            </div>
+          </div>
+
+          <div v-if="detailRecord.type === 'video'" class="drawer-detail-section">
+            <div class="drawer-detail-label">课程链接</div>
+            <a
+              class="drawer-detail-link"
+              :href="normalizeLink(detailRecord.link)"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {{ detailRecord.link || '未填写' }}
+            </a>
+            <div class="drawer-detail-label" style="margin-top:12px;">课时进度</div>
+            <div>第 {{ detailRecord.lesson }} / {{ detailRecord.totalLesson }} 课</div>
+          </div>
+
+          <div v-else-if="detailRecord.type === 'book'" class="drawer-detail-section">
+            <div class="drawer-detail-label">第几章</div>
+            <div style="font-weight:700;color:var(--text);">{{ detailRecord.chapter }}</div>
+            <div class="drawer-detail-label" style="margin-top:12px;">总章节数</div>
+            <div style="font-weight:700;color:var(--text);">{{ detailRecord.totalChapter }}</div>
+            <div class="drawer-detail-label" style="margin-top:12px;">当前页</div>
+            <div style="font-weight:700;color:var(--text);">{{ detailRecord.page }}</div>
+            <div class="drawer-detail-label" style="margin-top:12px;">总页数</div>
+            <div style="font-weight:700;color:var(--text);">{{ detailRecord.totalPage }}</div>
+          </div>
+
+          <div v-else class="drawer-detail-section">
+            <div class="drawer-detail-label">备注</div>
+            <div>{{ detailRecord.notes }}</div>
+          </div>
+        </div>
+      </Drawer>
     </div>
   </Cursor>
 </template>
@@ -637,5 +1057,147 @@ const statusText = (status: string) => (status === 'done' ? '完成' : status ==
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
+}
+
+.health-stack {
+  display: flex;
+  flex-direction: row;
+  gap: 20px;
+}
+.health-stack > div {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.health-stack .chart-wrap {
+  height: 300px;
+}
+@media (max-width: 900px) {
+  .health-stack {
+    flex-direction: column;
+  }
+  .health-stack > div {
+    flex: 1 1 auto;
+  }
+}
+
+.detail-clickable {
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.detail-clickable:hover {
+  opacity: 0.75;
+}
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.form-field-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+.drawer-detail {
+  padding: 8px 4px;
+}
+.drawer-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.drawer-detail-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.drawer-detail-section {
+  background: var(--bg-content);
+  border: 2px solid var(--border);
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 14px;
+  color: var(--text);
+  line-height: 1.7;
+}
+.drawer-detail-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+.drawer-detail-link {
+  color: #2b6cb0;
+  font-weight: 700;
+  text-decoration: underline;
+  word-break: break-all;
+}
+.drawer-detail-link:hover {
+  color: #1a4d8a;
+}
+
+/* ============ Animal Crossing dynamic background ============ */
+.ac-background {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+}
+.ac-bg-sky {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 15% 20%, rgba(255, 245, 200, 0.6) 0 120px, transparent 180px),
+    radial-gradient(circle at 85% 15%, rgba(200, 245, 220, 0.5) 0 100px, transparent 160px),
+    linear-gradient(180deg, #dff6f3 0%, #f8f8f0 45%, #eef6e8 100%);
+}
+.ac-cloud {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.72);
+  border-radius: 50px;
+  filter: blur(1px);
+  opacity: 0.85;
+}
+.ac-cloud::before,
+.ac-cloud::after {
+  content: '';
+  position: absolute;
+  background: inherit;
+  border-radius: 50%;
+}
+.cloud-1 { width: 140px; height: 48px; top: 10%; left: -160px; animation: cloudDrift 28s linear infinite; }
+.cloud-1::before { width: 70px; height: 70px; top: -32px; left: 18px; }
+.cloud-1::after { width: 55px; height: 55px; top: -22px; right: 14px; }
+.cloud-2 { width: 110px; height: 38px; top: 28%; left: -140px; animation: cloudDrift 38s linear infinite 8s; }
+.cloud-2::before { width: 55px; height: 55px; top: -26px; left: 14px; }
+.cloud-2::after { width: 42px; height: 42px; top: -18px; right: 12px; }
+.cloud-3 { width: 170px; height: 56px; top: 16%; left: -200px; animation: cloudDrift 48s linear infinite 18s; }
+.cloud-3::before { width: 85px; height: 85px; top: -40px; left: 22px; }
+.cloud-3::after { width: 65px; height: 65px; top: -30px; right: 18px; }
+
+.ac-leaf {
+  position: absolute;
+  font-size: 18px;
+  opacity: 0;
+  text-shadow: 0 2px 4px rgba(61, 52, 40, 0.12);
+}
+.leaf-1 { left: 10%; top: -5%; animation: leafFall 14s ease-in-out infinite; }
+.leaf-2 { left: 30%; top: -8%; animation: leafFall 18s ease-in-out infinite 4s; }
+.leaf-3 { left: 55%; top: -3%; animation: leafFall 16s ease-in-out infinite 2s; }
+.leaf-4 { left: 75%; top: -10%; animation: leafFall 20s ease-in-out infinite 7s; }
+.leaf-5 { left: 90%; top: -6%; animation: leafFall 15s ease-in-out infinite 10s; }
+
+@keyframes cloudDrift {
+  from { transform: translateX(0); }
+  to { transform: translateX(calc(100vw + 250px)); }
+}
+@keyframes leafFall {
+  0% { transform: translate(0, 0) rotate(0deg); opacity: 0; }
+  10% { opacity: 0.75; }
+  90% { opacity: 0.75; }
+  100% { transform: translate(30px, 110vh) rotate(360deg); opacity: 0; }
 }
 </style>

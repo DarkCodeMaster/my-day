@@ -105,35 +105,36 @@ body {
 }
 .panel-title .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--primary); }
 
-.calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
-.calendar-day-name { text-align: center; font-size: 12px; font-weight: 700; color: var(--text-secondary); padding: 6px 0; }
+.calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+.calendar-day-name { text-align: center; font-size: 14px; font-weight: 800; color: var(--text-body); padding: 8px 0; }
 .calendar-cell {
   aspect-ratio: 1;
-  border-radius: 12px;
+  border-radius: 14px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
-  font-weight: 600;
-  background: rgba(255,255,255,0.4);
-  border: 2px solid transparent;
+  gap: 2px;
+  font-size: 15px;
+  font-weight: 700;
+  background: rgba(255,255,255,0.55);
+  border: 2.5px solid transparent;
   cursor: pointer;
   transition: all var(--d-fast) var(--ease);
   position: relative;
   text-align: center;
+  line-height: 1.2;
 }
-.calendar-cell:hover { border-color: var(--primary); transform: translateY(-2px); }
+.calendar-cell:hover { background: rgba(255,255,255,0.9); border-color: var(--primary); transform: translateY(-3px); box-shadow: 0 4px 10px rgba(25,200,185,0.15); }
 .calendar-cell.is-today { background: var(--primary-bg); border-color: var(--primary); }
-.calendar-cell.has-weight::after { content: ''; position: absolute; bottom: 4px; width: 5px; height: 5px; border-radius: 50%; background: var(--success); }
-.calendar-cell .weight { font-size: 10px; color: var(--success); font-weight: 700; margin-top: 2px; }
+.calendar-cell .weight { font-size: 14px; color: var(--success); font-weight: 900; margin-top: 2px; }
 .calendar-cell.text-disabled { color: var(--text-disabled); }
 
 .chart-wrap { width: 100%; height: 260px; }
 .chart-svg { width: 100%; height: 100%; }
-.chart-line { fill: none; stroke: var(--primary); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
-.chart-dot { fill: var(--bg); stroke: var(--primary); stroke-width: 2.5; }
-.chart-area { fill: rgba(25,200,185,0.12); }
+.chart-line { fill: none; stroke: #f8a6b2; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
+.chart-dot { fill: var(--bg); stroke: #f8a6b2; stroke-width: 3; }
+.chart-area { fill: rgba(248, 166, 178, 0.14); }
 .chart-grid { stroke: var(--border); stroke-width: 1; stroke-dasharray: 4 4; }
 .chart-text { font-size: 10px; fill: var(--text-secondary); }
 .chart-selected-line { stroke: var(--focus-yellow); stroke-width: 2; stroke-dasharray: 4 4; }
@@ -141,8 +142,14 @@ body {
 .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; }
 .summary-card { cursor: default; text-align: center; }
 .summary-card:hover { transform: translateY(-2px); }
-.summary-label { font-size: 12px; color: var(--text-secondary); font-weight: 600; letter-spacing: 0.04em; }
-.summary-value { font-size: 28px; font-weight: 800; color: var(--text); margin-top: 4px; }
+.summary-label { font-size: 13px; color: var(--text); font-weight: 700; letter-spacing: 0.04em; }
+.summary-value { font-size: 28px; font-weight: 900; color: #1a1a1a; margin-top: 4px; }
+.summary-wallet :deep(.animal-wallet__value) {
+  color: #1a1a1a;
+  font-size: 26px;
+  font-weight: 900;
+  text-shadow: none;
+}
 
 .timeline { position: relative; padding-left: 28px; }
 .timeline::before { content: ''; position: absolute; left: 8px; top: 4px; bottom: 4px; width: 3px; background: var(--border); border-radius: 3px; }
@@ -159,7 +166,7 @@ body {
 .study-type-badge.book { background: #f8a6b2; color: #fff; }
 .study-type-badge.skill { background: #82d5bb; color: #fff; }
 
-.status-badge { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 50px; font-size: 12px; font-weight: 700; }
+.status-badge { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 50px; font-size: 12px; font-weight: 700; white-space: nowrap; }
 .status-badge.done { background: #d6f0c0; color: var(--success-active); }
 .status-badge.pending { background: #fff0c0; color: #a88010; }
 .status-badge.paused { background: #e8e0d4; color: var(--text-muted); }
@@ -170,11 +177,48 @@ body {
 .form-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
 .section { margin-bottom: 24px; }
 .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 12px; }
-.cell-thumb { width: 40px; height: 40px; border-radius: 12px; object-fit: cover; border: 2px solid var(--border); }
+.cell-thumb { width: 40px; height: 40px; border-radius: 12px; object-fit: cover; border: 2px solid var(--border); flex-shrink: 0; min-width: 40px; }
 .cell-title { font-weight: 700; color: var(--text); }
-.cell-meta { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+.cell-meta { font-size: 12px; color: var(--text-secondary); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 
-.phone-decoration { display: flex; justify-content: center; padding: 24px 0; }
-@media (max-width: 1100px) { .phone-decoration { display: none; } }
+.summary-grid .animal-card { display: flex; flex-direction: column; }
+.summary-count-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.page-root > .animal-loading {
+  position: fixed !important;
+  inset: 0;
+  z-index: 9999;
+  height: auto !important;
+  width: auto !important;
+  pointer-events: none;
+}
+.page-root > .animal-loading .animal-loading__container {
+  pointer-events: auto;
+}
+
+.animal-switch.study-switch {
+  min-width: 80px;
+  height: 36px;
+}
+.animal-switch.study-switch .animal-switch__handle {
+  width: 28px;
+  height: 28px;
+}
+.animal-switch.study-switch.animal-switch--checked .animal-switch__handle {
+  left: calc(100% - 31px);
+}
+.animal-switch.study-switch .animal-switch__inner {
+  padding: 0 10px 0 34px;
+  font-size: 13px;
+}
+.animal-switch.study-switch.animal-switch--checked .animal-switch__inner {
+  padding: 0 34px 0 10px;
+}
 
 .help-section { margin-top: 24px; }

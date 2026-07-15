@@ -12,8 +12,11 @@ export interface StudyItem {
   progress: number;
   link?: string;
   lesson?: number;
+  totalLesson?: number;
   chapter?: number;
+  totalChapter?: number;
   page?: number;
+  totalPage?: number;
   notes?: string;
 }
 
