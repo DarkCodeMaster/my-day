@@ -38,7 +38,9 @@ import { useMyDayStorage, migrateMyDayState } from '@/composables/useMyDayStorag
 import { todayStr, formatDateStr } from '@/utils/date';
 import { sanitizeHtml } from '@/utils/sanitize';
 import type { StudyItem, MoneyItem, WeightRecord, TaskItem } from '@/types';
+import type { CustomSelectOption } from '@/components/CustomSelect.vue';
 import DatePickerModal from '@/components/DatePickerModal.vue';
+import CustomSelect from '@/components/CustomSelect.vue';
 
 use([CanvasRenderer, PieChart, TooltipComponent, LegendComponent, TitleComponent, LabelLayout]);
 
@@ -666,7 +668,7 @@ const moneyCols: any[] = [
   { title: '状态', dataIndex: 'status', width: '100px' },
   { title: '操作', dataIndex: 'action', width: '120px', align: 'center' },
 ];
-const moneyStatusOptions: SelectOption[] = [
+const moneyStatusOptions: CustomSelectOption[] = [
   { key: 'pending', label: '未完成' },
   { key: 'done', label: '完成' },
   { key: 'paused', label: '暂停' },
@@ -1885,7 +1887,7 @@ const submitInspiration = () => {
           </div>
           <div class="form-field">
             <label class="form-field-label">状态</label>
-            <Select v-model="moneyForm.status" :options="moneyStatusOptions" />
+            <CustomSelect v-model="moneyForm.status" :options="moneyStatusOptions" />
           </div>
           <div class="form-field">
             <label class="form-field-label">进度</label>
@@ -1941,7 +1943,7 @@ const submitInspiration = () => {
           </div>
           <div class="form-field">
             <label class="form-field-label">状态</label>
-            <Select v-model="editMoneyForm.status" :options="moneyStatusOptions" />
+            <CustomSelect v-model="editMoneyForm.status" :options="moneyStatusOptions" />
           </div>
           <div class="form-field">
             <label class="form-field-label">进度</label>
@@ -2113,7 +2115,7 @@ const submitInspiration = () => {
         </div>
         <div class="form-field">
           <label class="form-field-label">计划时段</label>
-          <Select v-model="taskForm.timeSlot" :options="taskTimeSlotOptions" />
+          <CustomSelect v-model="taskForm.timeSlot" :options="taskTimeSlotOptions" />
         </div>
         <div class="form-field">
           <label class="form-field-label">描述</label>
@@ -2128,7 +2130,7 @@ const submitInspiration = () => {
         </div>
         <div class="form-field">
           <label class="form-field-label">关联</label>
-          <Select v-model="taskForm.linkKey" :options="taskLinkOptions" />
+          <CustomSelect v-model="taskForm.linkKey" :options="taskLinkOptions" />
         </div>
       </div>
       <template #footer>
