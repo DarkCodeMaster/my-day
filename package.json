@@ -15,8 +15,10 @@
     "electron:preview": "npm run build && electron ."
   },
   "dependencies": {
+    "@types/dompurify": "^3.0.5",
     "@vueup/vue-quill": "^1.5.5",
     "animal-island-vue": "file:../animal-island-vue",
+    "dompurify": "^3.4.12",
     "echarts": "^6.1.0",
     "vue": "^3.5.13"
   },

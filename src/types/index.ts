@@ -37,6 +37,13 @@ export interface TodayLog {
   content: string;
 }
 
+export interface InspirationItem {
+  id: number;
+  content: string;
+  date: string;
+  time: string;
+}
+
 export interface TaskItem {
   id: number;
   title: string;
@@ -53,10 +60,11 @@ export interface MyDayState {
   version: number;
   activeTab: string;
   chartRange: string;
-  moneyPlan?: string;
+  moneyPlan: string;
   weights: WeightRecord[];
   studyItems: StudyItem[];
   moneyItems: MoneyItem[];
   todayLogs: TodayLog[];
   tasks: TaskItem[];
+  inspirations: InspirationItem[];
 }

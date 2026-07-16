@@ -34,8 +34,9 @@ import { CanvasRenderer } from 'echarts/renderers';
 import { PieChart } from 'echarts/charts';
 import { TooltipComponent, LegendComponent, TitleComponent } from 'echarts/components';
 import { LabelLayout } from 'echarts/features';
-import { useMyDayStorage } from '@/composables/useMyDayStorage';
+import { useMyDayStorage, migrateMyDayState } from '@/composables/useMyDayStorage';
 import { todayStr, formatDateStr } from '@/utils/date';
+import { sanitizeHtml } from '@/utils/sanitize';
 import type { StudyItem, MoneyItem, WeightRecord, TaskItem } from '@/types';
 import DatePickerModal from '@/components/DatePickerModal.vue';
 
@@ -50,7 +51,9 @@ const {
   moneyPlan,
   todayLogs,
   tasks,
+  inspirations,
   isLoaded,
+  saveState,
 } = useMyDayStorage();
 
 const welcomeTrigger = ref(0);
@@ -184,7 +187,7 @@ const submitTask = () => {
   if (taskModalMode.value === 'edit' && taskEditTarget.value) {
     const task = taskEditTarget.value;
     task.title = title;
-    task.description = taskForm.description.trim();
+    task.description = taskForm.description;
     task.deadline = deadline;
     task.timeSlot = timeSlot;
     task.status = status;
@@ -194,7 +197,7 @@ const submitTask = () => {
     tasks.push({
       id: Date.now(),
       title,
-      description: taskForm.description.trim(),
+      description: taskForm.description,
       deadline,
       timeSlot,
       status,
@@ -881,14 +884,14 @@ const displayTodayLogs = computed(() =>
 );
 
 const inspirationLogs = computed(() =>
-  todayLogs
-    .map((log, index) => ({ log, index }))
-    .filter(({ log }) => log.category === 'inspiration')
-    .sort((a, b) => `${b.log.date}T${b.log.time}`.localeCompare(`${a.log.date}T${a.log.time}`))
+  [...inspirations].sort(
+    (a, b) => `${b.date}T${b.time}`.localeCompare(`${a.date}T${a.time}`)
+  )
 );
 
-const deleteInspiration = (index: number) => {
-  todayLogs.splice(index, 1);
+const deleteInspiration = (id: number) => {
+  const idx = inspirations.findIndex((item) => item.id === id);
+  if (idx !== -1) inspirations.splice(idx, 1);
 };
 
 const todayReport = computed(() => {
@@ -936,7 +939,8 @@ const generateExport = () => {
     const data = JSON.parse(raw);
     exportJson.value = JSON.stringify(data, null, 2);
   } catch {
-    exportJson.value = raw;
+    exportJson.value = '';
+    Notification.error('本地数据格式异常，无法导出');
   }
 };
 
@@ -987,15 +991,30 @@ const validateImportData = (data: any): { valid: false; error: string } | { vali
   if (typeof data !== 'object' || data === null) {
     return { valid: false, error: '数据必须是 JSON 对象' };
   }
-  if (!Array.isArray(data.weights)) return { valid: false, error: '缺少 weights 数组' };
-  if (!Array.isArray(data.studyItems)) return { valid: false, error: '缺少 studyItems 数组' };
-  if (!Array.isArray(data.moneyItems)) return { valid: false, error: '缺少 moneyItems 数组' };
-  if (data.todayLogs != null && !Array.isArray(data.todayLogs)) {
-    return { valid: false, error: 'todayLogs 必须是数组' };
+  if (data.version != null && typeof data.version !== 'number') {
+    return { valid: false, error: 'version 必须是数字' };
   }
-  if (data.tasks != null && !Array.isArray(data.tasks)) {
-    return { valid: false, error: 'tasks 必须是数组' };
+  if (data.version != null && data.version < 1) {
+    return { valid: false, error: 'version 不能小于 1' };
   }
+
+  const arrayFields = ['weights', 'studyItems', 'moneyItems', 'todayLogs', 'tasks', 'inspirations'];
+  for (const key of arrayFields) {
+    if (data[key] != null && !Array.isArray(data[key])) {
+      return { valid: false, error: `${key} 必须是数组` };
+    }
+  }
+
+  if (data.moneyPlan != null && typeof data.moneyPlan !== 'string') {
+    return { valid: false, error: 'moneyPlan 必须是字符串' };
+  }
+  if (data.activeTab != null && typeof data.activeTab !== 'string') {
+    return { valid: false, error: 'activeTab 必须是字符串' };
+  }
+  if (data.chartRange != null && typeof data.chartRange !== 'string') {
+    return { valid: false, error: 'chartRange 必须是字符串' };
+  }
+
   return { valid: true, data };
 };
 
@@ -1022,18 +1041,22 @@ const executeImport = () => {
   try {
     const parsed = JSON.parse(importJson.value);
     const result = validateImportData(parsed);
-    if (!result.valid) return;
+    if (!result.valid) {
+      importError.value = result.error;
+      return;
+    }
 
-    weights.splice(0, weights.length, ...(parsed.weights || []));
-    studyItems.splice(0, studyItems.length, ...(parsed.studyItems || []));
-    moneyItems.splice(0, moneyItems.length, ...(parsed.moneyItems || []));
-    tasks.splice(0, tasks.length, ...(parsed.tasks || []));
+    const migrated = migrateMyDayState(parsed);
 
-    const today = todayStr();
-    const logs = (parsed.todayLogs || [])
-      .map((log: any) => (typeof log === 'object' && log ? { ...log, date: log.date || today } : null))
-      .filter((log: any) => log && log.date === today);
-    todayLogs.splice(0, todayLogs.length, ...logs);
+    activeTab.value = migrated.activeTab;
+    chartRange.value = migrated.chartRange;
+    moneyPlan.value = migrated.moneyPlan;
+    weights.splice(0, weights.length, ...migrated.weights);
+    studyItems.splice(0, studyItems.length, ...migrated.studyItems);
+    moneyItems.splice(0, moneyItems.length, ...migrated.moneyItems);
+    todayLogs.splice(0, todayLogs.length, ...migrated.todayLogs);
+    tasks.splice(0, tasks.length, ...migrated.tasks);
+    inspirations.splice(0, inspirations.length, ...migrated.inspirations);
 
     importJson.value = '';
     importConfirmModalOpen.value = false;
@@ -1050,7 +1073,10 @@ const executeClearAll = () => {
   moneyItems.splice(0, moneyItems.length);
   todayLogs.splice(0, todayLogs.length);
   tasks.splice(0, tasks.length);
+  inspirations.splice(0, inspirations.length);
+  moneyPlan.value = '';
   clearAllModalOpen.value = false;
+  saveState();
   Notification.success('已清空所有数据');
 };
 
@@ -1129,7 +1155,12 @@ const openInspirationModal = () => {
 const submitInspiration = () => {
   const content = inspirationForm.value.trim();
   if (!content) return;
-  pushTodayLog('inspiration', `💡 灵感：${content}`);
+  inspirations.push({
+    id: Date.now(),
+    content,
+    date: todayStr(),
+    time: nowTimeStr(),
+  });
   inspirationForm.value = '';
   inspirationModalOpen.value = false;
   Notification.success('灵感已记录');
@@ -1216,7 +1247,11 @@ const submitInspiration = () => {
                             ⏰ {{ task.deadline || '长期' }}
                           </span>
                         </div>
-                        <div v-if="task.description" class="kanban-card-desc">{{ task.description }}</div>
+                        <div
+                          v-if="task.description"
+                          class="kanban-card-desc"
+                          v-html="sanitizeHtml(task.description)"
+                        ></div>
                         <div
                           v-if="task.linkType"
                           class="kanban-card-link"
@@ -1540,12 +1575,12 @@ const submitInspiration = () => {
                 </div>
                 <Card>
                   <div v-if="inspirationLogs.length" class="timeline">
-                    <div v-for="(item, i) in inspirationLogs" :key="i" class="timeline-item">
+                    <div v-for="item in inspirationLogs" :key="item.id" class="timeline-item">
                       <span class="timeline-dot inspiration"></span>
-                      <div class="timeline-time">{{ item.log.date }} {{ item.log.time }}</div>
+                      <div class="timeline-time">{{ item.date }} {{ item.time }}</div>
                       <div style="display:flex;align-items:center;gap:12px;">
-                        <div class="timeline-content" style="flex:1;">{{ item.log.content }}</div>
-                        <span class="inspiration-delete" @click="deleteInspiration(item.index)">×</span>
+                        <div class="timeline-content" style="flex:1;">{{ item.content }}</div>
+                        <span class="inspiration-delete" @click="deleteInspiration(item.id)">×</span>
                       </div>
                     </div>
                   </div>
@@ -2034,7 +2069,7 @@ const submitInspiration = () => {
 
           <div v-if="moneyDetailRecord.description" class="drawer-detail-section">
             <div class="drawer-detail-label">描述</div>
-            <div v-html="moneyDetailRecord.description"></div>
+            <div v-html="sanitizeHtml(moneyDetailRecord.description)"></div>
           </div>
         </div>
       </Drawer>
@@ -2082,13 +2117,14 @@ const submitInspiration = () => {
         </div>
         <div class="form-field">
           <label class="form-field-label">描述</label>
-          <textarea
-            v-model="taskForm.description"
-            class="import-textarea"
-            style="width:100%;"
-            rows="3"
+          <QuillEditor
+            v-model:content="taskForm.description"
+            content-type="html"
+            theme="snow"
+            toolbar="full"
             placeholder="补充说明..."
-          ></textarea>
+            style="width:100%;"
+          />
         </div>
         <div class="form-field">
           <label class="form-field-label">关联</label>
