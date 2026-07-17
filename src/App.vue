@@ -34,7 +34,7 @@ import { PieChart } from 'echarts/charts';
 import { TooltipComponent, LegendComponent, TitleComponent } from 'echarts/components';
 import { LabelLayout } from 'echarts/features';
 import { useMyDayStorage, migrateMyDayState } from '@/composables/useMyDayStorage';
-import { useTodayLog, nowTimeStr } from '@/composables/useTodayLog';
+import { useTodayLog } from '@/composables/useTodayLog';
 import { useDetailDrawers } from '@/composables/useDetailDrawers';
 import { useDeleteConfirm } from '@/composables/useDeleteConfirm';
 import { todayStr, formatDateStr } from '@/utils/date';
@@ -46,7 +46,9 @@ import DatePickerModal from '@/components/DatePickerModal.vue';
 import CustomSelect from '@/components/CustomSelect.vue';
 import DetailDrawers from '@/components/DetailDrawers.vue';
 import DeleteConfirmModal from '@/components/DeleteConfirmModal.vue';
+import InspirationComposer from '@/components/InspirationComposer.vue';
 import TodayPanel from '@/components/panels/TodayPanel.vue';
+import InspirationPanel from '@/components/panels/InspirationPanel.vue';
 
 use([CanvasRenderer, PieChart, TooltipComponent, LegendComponent, TitleComponent, LabelLayout]);
 
@@ -888,17 +890,6 @@ const pendingIncome = computed(() =>
   moneyItems.filter((m: MoneyItem) => m.status !== 'done').reduce((s, m) => s + m.amount, 0)
 );
 
-const inspirationLogs = computed(() =>
-  [...inspirations].sort(
-    (a, b) => `${b.date}T${b.time}`.localeCompare(`${a.date}T${a.time}`)
-  )
-);
-
-const deleteInspiration = (id: number) => {
-  const idx = inspirations.findIndex((item) => item.id === id);
-  if (idx !== -1) inspirations.splice(idx, 1);
-};
-
 /* ==================== Import / Export ==================== */
 const exportJson = ref('');
 const importJson = ref('');
@@ -1051,28 +1042,6 @@ const executeClearAll = () => {
   clearAllModalOpen.value = false;
   saveState();
   Notification.success('已清空所有数据');
-};
-
-/* ==================== Today ==================== */
-/* ==================== Helpers ==================== */
-const inspirationModalOpen = ref(false);
-const inspirationForm = ref('');
-const openInspirationModal = () => {
-  inspirationForm.value = '';
-  inspirationModalOpen.value = true;
-};
-const submitInspiration = () => {
-  const content = inspirationForm.value.trim();
-  if (!content) return;
-  inspirations.push({
-    id: Date.now(),
-    content,
-    date: todayStr(),
-    time: nowTimeStr(),
-  });
-  inspirationForm.value = '';
-  inspirationModalOpen.value = false;
-  Notification.success('灵感已记录');
 };
 </script>
 
@@ -1452,26 +1421,7 @@ const submitInspiration = () => {
 
             <!-- 灵感 -->
             <template #inspiration>
-              <div class="section">
-                <div class="section-head">
-                  <Title color="app-red" size="middle">灵感收集</Title>
-                </div>
-                <Card>
-                  <div v-if="inspirationLogs.length" class="timeline">
-                    <div v-for="item in inspirationLogs" :key="item.id" class="timeline-item">
-                      <span class="timeline-dot inspiration"></span>
-                      <div class="timeline-time">{{ item.date }} {{ item.time }}</div>
-                      <div style="display:flex;align-items:center;gap:12px;">
-                        <div class="timeline-content" style="flex:1;">{{ item.content }}</div>
-                        <span class="inspiration-delete" @click="deleteInspiration(item.id)">×</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div v-else class="animal-table-empty" style="padding:40px 0;text-align:center;">
-                    还没有记录灵感，点击右下角 💡 按钮添加吧~
-                  </div>
-                </Card>
-              </div>
+              <InspirationPanel />
             </template>
 
             <!-- 备份 -->
@@ -1854,15 +1804,7 @@ const submitInspiration = () => {
     </div>
     <NotificationContainer />
 
-    <Button
-      danger
-      type="primary"
-      size="large"
-      style="position:fixed;right:28px;bottom:28px;z-index:1000;"
-      @click="openInspirationModal"
-    >
-      💡
-    </Button>
+    <InspirationComposer />
 
     <Modal
       v-model:open="taskModalOpen"
@@ -1913,31 +1855,6 @@ const submitInspiration = () => {
         <div style="display:flex;justify-content:flex-end;gap:12px;">
           <Button type="primary" size="middle" @click="taskModalOpen = false">取消</Button>
           <Button type="primary" size="middle" @click="submitTask">{{ taskModalMode === 'add' ? '创建' : '保存' }}</Button>
-        </div>
-      </template>
-    </Modal>
-
-    <Modal
-      v-model:open="inspirationModalOpen"
-      title="记录灵感"
-      :typewriter="false"
-      :show-footer="true"
-      :width="1040"
-    >
-      <div class="form-field" style="align-self: stretch; width: 100%;">
-        <label class="form-field-label">灵感内容</label>
-        <textarea
-          v-model="inspirationForm"
-          class="import-textarea"
-          style="width:100%;"
-          rows="4"
-          placeholder="突然想到什么？记下来吧..."
-        ></textarea>
-      </div>
-      <template #footer>
-        <div style="display:flex;justify-content:flex-end;gap:12px;">
-          <Button type="primary" size="middle" @click="inspirationModalOpen = false">取消</Button>
-          <Button danger type="primary" size="middle" @click="submitInspiration">保存</Button>
         </div>
       </template>
     </Modal>
