@@ -12,7 +12,8 @@
     "electron:build": "npm run build && electron-builder",
     "electron:build:win": "npm run build && electron-builder --win",
     "electron:build:mac": "npm run build && electron-builder --mac",
-    "electron:preview": "npm run build && electron ."
+    "electron:preview": "npm run build && electron .",
+    "icon": "node scripts/make-icon.mjs"
   },
   "dependencies": {
     "@types/dompurify": "^3.0.5",
@@ -25,8 +26,10 @@
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.0",
     "cross-env": "^7.0.3",
-    "electron": "^33.0.0",
+    "electron": "^33.4.11",
     "electron-builder": "^25.1.7",
+    "jimp": "^1.6.1",
+    "png-to-ico": "^3.0.2",
     "typescript": "^5.7.3",
     "vite": "^7.3.2",
     "vue-tsc": "^2.2.0"
@@ -45,8 +48,17 @@
     "extraResources": [],
     "asar": true,
     "win": {
-      "target": "portable",
-      "signAndEditExecutable": false
+      "target": "nsis",
+      "signAndEditExecutable": true,
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "MyDay"
     },
     "mac": {
       "target": {
@@ -54,7 +66,8 @@
         "arch": [
           "arm64"
         ]
-      }
+      },
+      "icon": "build/icon.png"
     },
     "publish": null
   }

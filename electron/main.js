@@ -16,6 +16,7 @@ function createWindow() {
     minWidth: 900,
     minHeight: 600,
     autoHideMenuBar: true,
+    icon: path.join(__dirname, 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -55,6 +56,8 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // Windows 任务栏图标按 AppUserModelId 归组，需与 package.json 的 appId 一致
+  app.setAppUserModelId('com.example.myday');
   createWindow();
 
   app.on('activate', () => {
