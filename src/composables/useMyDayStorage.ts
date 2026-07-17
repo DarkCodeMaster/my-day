@@ -67,72 +67,85 @@ export function migrateMyDayState(data: any): MyDayState {
   };
 }
 
-export function useMyDayStorage() {
-  const activeTab = ref('health');
-  const chartRange = ref('7d');
-  const weights = reactive<WeightRecord[]>([]);
-  const studyItems = reactive<StudyItem[]>([]);
-  const moneyItems = reactive<MoneyItem[]>([]);
-  const todayLogs = reactive<TodayLog[]>([]);
-  const tasks = reactive<TaskItem[]>([]);
-  const inspirations = reactive<InspirationItem[]>([]);
-  const moneyPlan = ref('');
-  const isLoaded = ref(false);
+/* ==================== 模块级单例状态 ====================
+ * 所有组件共享同一份 state。写操作只能 splice/push/改属性，
+ * 禁止整体重新赋值（会断开其他组件持有的引用）。
+ */
+const activeTab = ref('health');
+const chartRange = ref('7d');
+const weights = reactive<WeightRecord[]>([]);
+const studyItems = reactive<StudyItem[]>([]);
+const moneyItems = reactive<MoneyItem[]>([]);
+const todayLogs = reactive<TodayLog[]>([]);
+const tasks = reactive<TaskItem[]>([]);
+const inspirations = reactive<InspirationItem[]>([]);
+const moneyPlan = ref('');
+const isLoaded = ref(false);
 
-  const saveState = () => {
-    try {
-      const state: MyDayState = {
-        version: CURRENT_VERSION,
-        activeTab: activeTab.value,
-        chartRange: chartRange.value,
-        moneyPlan: moneyPlan.value,
-        weights: [...weights],
-        studyItems: [...studyItems],
-        moneyItems: [...moneyItems],
-        todayLogs: [...todayLogs],
-        tasks: [...tasks],
-        inspirations: [...inspirations],
-      };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch (e) {
-      console.warn('Failed to save MyDay data:', e);
-    }
-  };
+const saveState = () => {
+  try {
+    const state: MyDayState = {
+      version: CURRENT_VERSION,
+      activeTab: activeTab.value,
+      chartRange: chartRange.value,
+      moneyPlan: moneyPlan.value,
+      weights: [...weights],
+      studyItems: [...studyItems],
+      moneyItems: [...moneyItems],
+      todayLogs: [...todayLogs],
+      tasks: [...tasks],
+      inspirations: [...inspirations],
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (e) {
+    console.warn('Failed to save MyDay data:', e);
+  }
+};
 
-  onMounted(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed.version != null && typeof parsed.version === 'number' && parsed.version > CURRENT_VERSION) {
-          console.warn(`MyDay data version ${parsed.version} is newer than supported ${CURRENT_VERSION}`);
-        }
-        const saved = migrateMyDayState(parsed);
-        activeTab.value = saved.activeTab;
-        chartRange.value = saved.chartRange;
-        moneyPlan.value = saved.moneyPlan;
-        weights.splice(0, weights.length, ...saved.weights);
-        studyItems.splice(0, studyItems.length, ...saved.studyItems);
-        moneyItems.splice(0, moneyItems.length, ...saved.moneyItems);
-        todayLogs.splice(0, todayLogs.length, ...saved.todayLogs);
-        tasks.splice(0, tasks.length, ...saved.tasks);
-        inspirations.splice(0, inspirations.length, ...saved.inspirations);
+// 自动保存：模块加载时注册一次，与应用同寿命
+watch([activeTab, chartRange], saveState);
+watch(weights, saveState, { deep: true });
+watch(studyItems, saveState, { deep: true });
+watch(moneyItems, saveState, { deep: true });
+watch(todayLogs, saveState, { deep: true });
+watch(tasks, saveState, { deep: true });
+watch(inspirations, saveState, { deep: true });
+watch(moneyPlan, saveState);
+
+let loadAttempted = false;
+
+/** 从 localStorage 加载并迁移数据，只执行一次（flag 防重） */
+function ensureLoaded() {
+  if (loadAttempted) return;
+  loadAttempted = true;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed.version != null && typeof parsed.version === 'number' && parsed.version > CURRENT_VERSION) {
+        console.warn(`MyDay data version ${parsed.version} is newer than supported ${CURRENT_VERSION}`);
       }
-    } catch (e) {
-      console.warn('Failed to load MyDay data:', e);
-    } finally {
-      isLoaded.value = true;
+      const saved = migrateMyDayState(parsed);
+      activeTab.value = saved.activeTab;
+      chartRange.value = saved.chartRange;
+      moneyPlan.value = saved.moneyPlan;
+      weights.splice(0, weights.length, ...saved.weights);
+      studyItems.splice(0, studyItems.length, ...saved.studyItems);
+      moneyItems.splice(0, moneyItems.length, ...saved.moneyItems);
+      todayLogs.splice(0, todayLogs.length, ...saved.todayLogs);
+      tasks.splice(0, tasks.length, ...saved.tasks);
+      inspirations.splice(0, inspirations.length, ...saved.inspirations);
     }
-  });
+  } catch (e) {
+    console.warn('Failed to load MyDay data:', e);
+  } finally {
+    isLoaded.value = true;
+  }
+}
 
-  watch([activeTab, chartRange], saveState);
-  watch(weights, saveState, { deep: true });
-  watch(studyItems, saveState, { deep: true });
-  watch(moneyItems, saveState, { deep: true });
-  watch(todayLogs, saveState, { deep: true });
-  watch(tasks, saveState, { deep: true });
-  watch(inspirations, saveState, { deep: true });
-  watch(moneyPlan, saveState);
+export function useMyDayStorage() {
+  // 保持原有「挂载后才加载」的时序；重复调用由 flag 防重
+  onMounted(ensureLoaded);
 
   return {
     activeTab,
