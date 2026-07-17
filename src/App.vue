@@ -185,17 +185,16 @@ const submitTask = () => {
   const { linkType, linkId } = parseTaskLink(taskForm.linkKey);
   const deadline = taskForm.deadline || undefined;
   const timeSlot = taskForm.timeSlot as TaskItem['timeSlot'];
-  const status: TaskItem['status'] = deadline && isDeadlineWithinDays(deadline, 3) ? 'today' : 'todo';
   if (taskModalMode.value === 'edit' && taskEditTarget.value) {
     const task = taskEditTarget.value;
     task.title = title;
     task.description = taskForm.description;
     task.deadline = deadline;
     task.timeSlot = timeSlot;
-    task.status = status;
     task.linkType = linkType;
     task.linkId = linkId;
   } else {
+    const status: TaskItem['status'] = deadline && isDeadlineWithinDays(deadline, 3) ? 'today' : 'todo';
     tasks.push({
       id: Date.now(),
       title,
