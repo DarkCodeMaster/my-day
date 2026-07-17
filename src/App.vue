@@ -20,7 +20,6 @@ import {
   Cursor,
   Typewriter,
   Icon,
-  Drawer,
   Wallet,
   Notification,
   NotificationContainer,
@@ -35,12 +34,18 @@ import { PieChart } from 'echarts/charts';
 import { TooltipComponent, LegendComponent, TitleComponent } from 'echarts/components';
 import { LabelLayout } from 'echarts/features';
 import { useMyDayStorage, migrateMyDayState } from '@/composables/useMyDayStorage';
+import { useTodayLog, nowTimeStr } from '@/composables/useTodayLog';
+import { useDetailDrawers } from '@/composables/useDetailDrawers';
+import { useDeleteConfirm } from '@/composables/useDeleteConfirm';
 import { todayStr, formatDateStr } from '@/utils/date';
 import { sanitizeHtml } from '@/utils/sanitize';
+import { studyTypeText, statusText, categoryName } from '@/utils/labels';
 import type { StudyItem, MoneyItem, WeightRecord, TaskItem } from '@/types';
 import type { CustomSelectOption } from '@/components/CustomSelect.vue';
 import DatePickerModal from '@/components/DatePickerModal.vue';
 import CustomSelect from '@/components/CustomSelect.vue';
+import DetailDrawers from '@/components/DetailDrawers.vue';
+import DeleteConfirmModal from '@/components/DeleteConfirmModal.vue';
 
 use([CanvasRenderer, PieChart, TooltipComponent, LegendComponent, TitleComponent, LabelLayout]);
 
@@ -57,6 +62,10 @@ const {
   isLoaded,
   saveState,
 } = useMyDayStorage();
+
+const { pushTodayLog } = useTodayLog();
+const { openDetail, openMoneyDetail } = useDetailDrawers();
+const { openDelete } = useDeleteConfirm();
 
 const welcomeTrigger = ref(0);
 onMounted(() => {
@@ -1082,71 +1091,7 @@ const executeClearAll = () => {
 };
 
 /* ==================== Today ==================== */
-const categoryName = (c: 'health' | 'study' | 'money' | 'inspiration') => ({ health: '健康', study: '学习', money: '赚钱', inspiration: '灵感' }[c]);
-
-/* ==================== Delete Modal ==================== */
-const deleteModalOpen = ref(false);
-const deleteTarget = ref<{ type: 'study' | 'money'; id: number } | null>(null);
-const openDelete = (type: 'study' | 'money', id: number) => {
-  deleteTarget.value = { type, id };
-  deleteModalOpen.value = true;
-};
-const confirmDelete = () => {
-  if (!deleteTarget.value) return;
-  const { type, id } = deleteTarget.value;
-  if (type === 'study') {
-    const idx = studyItems.findIndex((s: StudyItem) => s.id === id);
-    if (idx > -1) {
-      const name = studyItems[idx].name;
-      studyItems.splice(idx, 1);
-      pushTodayLog('study', `删除学习项 ${name}`);
-    }
-  } else {
-    const idx = moneyItems.findIndex((m: MoneyItem) => m.id === id);
-    if (idx > -1) {
-      const desc = moneyItems[idx].desc;
-      moneyItems.splice(idx, 1);
-      for (let i = tasks.length - 1; i >= 0; i--) {
-        if (tasks[i].linkType === 'money' && tasks[i].linkId === id) {
-          tasks.splice(i, 1);
-        }
-      }
-      pushTodayLog('money', `删除赚钱任务 ${desc}`);
-    }
-  }
-  deleteModalOpen.value = false;
-};
-
-/* ==================== Detail Drawer ==================== */
-const detailDrawerOpen = ref(false);
-const detailRecord = ref<StudyItem | null>(null);
-const openDetail = (record: StudyItem) => {
-  detailRecord.value = record;
-  detailDrawerOpen.value = true;
-};
-const moneyDetailDrawerOpen = ref(false);
-const moneyDetailRecord = ref<MoneyItem | null>(null);
-const openMoneyDetail = (record: MoneyItem) => {
-  moneyDetailRecord.value = record;
-  moneyDetailDrawerOpen.value = true;
-};
-const normalizeLink = (url?: string) => {
-  if (!url) return '#';
-  if (/^https?:\/\//i.test(url)) return url;
-  return `https://${url}`;
-};
-
 /* ==================== Helpers ==================== */
-const studyTypeText = (type: string) => (type === 'video' ? '视频' : type === 'book' ? '书籍' : '技能');
-const statusText = (status: string) => (status === 'done' ? '完成' : status === 'pending' ? '未完成' : '暂停');
-
-const nowTimeStr = () => {
-  const now = new Date();
-  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-};
-const pushTodayLog = (category: 'health' | 'study' | 'money' | 'inspiration', content: string) => {
-  todayLogs.push({ date: todayStr(), time: nowTimeStr(), category, content });
-};
 const inspirationModalOpen = ref(false);
 const inspirationForm = ref('');
 const openInspirationModal = () => {
@@ -1676,14 +1621,7 @@ const submitInspiration = () => {
         <Footer type="tree" />
       </div>
 
-      <Modal
-        v-model:open="deleteModalOpen"
-        title="确认删除"
-        :typewriter="false"
-        @ok="confirmDelete"
-      >
-        确定要删除这条记录吗？动森的世界里也要学会断舍离哦~
-      </Modal>
+      <DeleteConfirmModal />
 
       <Modal
         v-model:open="importConfirmModalOpen"
@@ -1975,105 +1913,7 @@ const submitInspiration = () => {
         title="选择截止日期"
         :mask-style="{ zIndex: 1200 }"
       />
-
-      <Drawer
-        :open="detailDrawerOpen"
-        title="学习详情"
-        placement="bottom"
-        height="400"
-        @close="detailDrawerOpen = false"
-      >
-        <div v-if="detailRecord" class="drawer-detail">
-          <div class="drawer-detail-head">
-            <div
-              class="cell-thumb"
-              :style="{ background: detailRecord.image, color: '#fff', textShadow: '0 1px 1px rgba(0,0,0,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '14px' }"
-            >
-              {{ detailRecord.abbr }}
-            </div>
-            <div>
-              <div class="drawer-detail-title">{{ detailRecord.name }}</div>
-              <span class="study-type-badge" :class="detailRecord.type">{{ studyTypeText(detailRecord.type) }}</span>
-            </div>
-          </div>
-
-          <div class="drawer-detail-section">
-            <div class="drawer-detail-label">进度</div>
-            <div style="font-weight:700;color:var(--text);">{{ detailRecord.progress }}%</div>
-            <div class="progress-bar">
-              <div class="progress-bar-fill" :style="{ width: detailRecord.progress + '%' }"></div>
-            </div>
-          </div>
-
-          <div v-if="detailRecord.type === 'video'" class="drawer-detail-section">
-            <div class="drawer-detail-label">课程链接</div>
-            <a
-              class="drawer-detail-link"
-              :href="normalizeLink(detailRecord.link)"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              {{ detailRecord.link || '未填写' }}
-            </a>
-            <div class="drawer-detail-label" style="margin-top:12px;">课时进度</div>
-            <div>第 {{ detailRecord.lesson }} / {{ detailRecord.totalLesson }} 课</div>
-          </div>
-
-          <div v-else-if="detailRecord.type === 'book'" class="drawer-detail-section">
-            <div class="drawer-detail-label">第几章</div>
-            <div style="font-weight:700;color:var(--text);">{{ detailRecord.chapter }}</div>
-            <div class="drawer-detail-label" style="margin-top:12px;">总章节数</div>
-            <div style="font-weight:700;color:var(--text);">{{ detailRecord.totalChapter }}</div>
-            <div class="drawer-detail-label" style="margin-top:12px;">当前页</div>
-            <div style="font-weight:700;color:var(--text);">{{ detailRecord.page }}</div>
-            <div class="drawer-detail-label" style="margin-top:12px;">总页数</div>
-            <div style="font-weight:700;color:var(--text);">{{ detailRecord.totalPage }}</div>
-          </div>
-
-          <div v-else class="drawer-detail-section">
-            <div class="drawer-detail-label">备注</div>
-            <div>{{ detailRecord.notes }}</div>
-          </div>
-        </div>
-      </Drawer>
-
-      <Drawer
-        :open="moneyDetailDrawerOpen"
-        title="赚钱任务详情"
-        placement="bottom"
-        height="400"
-        @close="moneyDetailDrawerOpen = false"
-      >
-        <div v-if="moneyDetailRecord" class="drawer-detail">
-          <div class="drawer-detail-head">
-            <div style="font-weight:800;font-size:20px;color:var(--text);">{{ moneyDetailRecord.desc }}</div>
-            <span class="status-badge" :class="moneyDetailRecord.status">{{ statusText(moneyDetailRecord.status) }}</span>
-          </div>
-
-          <div class="drawer-detail-section">
-            <div class="drawer-detail-label">金额</div>
-            <div style="font-weight:700;color:var(--text);">¥{{ moneyDetailRecord.amount }}</div>
-          </div>
-
-          <div class="drawer-detail-section">
-            <div class="drawer-detail-label">截止日期</div>
-            <div>{{ moneyDetailRecord.deadline }}</div>
-          </div>
-
-          <div class="drawer-detail-section">
-            <div class="drawer-detail-label">进度</div>
-            <div style="font-weight:700;color:var(--text);">{{ moneyDetailRecord.progress }}%</div>
-            <div class="progress-bar">
-              <div class="progress-bar-fill" :style="{ width: moneyDetailRecord.progress + '%' }"></div>
-            </div>
-          </div>
-
-          <div v-if="moneyDetailRecord.description" class="drawer-detail-section">
-            <div class="drawer-detail-label">描述</div>
-            <div v-html="sanitizeHtml(moneyDetailRecord.description)"></div>
-          </div>
-        </div>
-      </Drawer>
+      <DetailDrawers />
     </div>
     <NotificationContainer />
 
