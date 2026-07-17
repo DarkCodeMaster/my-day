@@ -2088,62 +2088,6 @@ const submitInspiration = () => {
   min-height: 260px;
 }
 
-.form-field {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.form-field-label {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text-secondary);
-}
-.form-field-error {
-  font-size: 12px;
-  color: var(--error);
-  font-weight: 700;
-  margin-top: 2px;
-}
-.drawer-detail {
-  padding: 10px 6px;
-}
-.drawer-detail-head {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  margin-bottom: 24px;
-}
-.drawer-detail-title {
-  font-size: 20px;
-  font-weight: 800;
-  color: var(--text);
-  margin-bottom: 6px;
-}
-.drawer-detail-section {
-  background: var(--bg-content);
-  border: 2px solid var(--border);
-  border-radius: 18px;
-  padding: 18px;
-  margin-bottom: 16px;
-  color: var(--text);
-  line-height: 1.8;
-}
-.drawer-detail-label {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text-secondary);
-  margin-bottom: 4px;
-  text-transform: uppercase;
-}
-.drawer-detail-link {
-  color: #2b6cb0;
-  font-weight: 700;
-  text-decoration: underline;
-  word-break: break-all;
-}
-.drawer-detail-link:hover {
-  color: #1a4d8a;
-}
 
 .corner-sun {
   position: fixed;
@@ -2411,20 +2355,6 @@ const submitInspiration = () => {
   color: var(--text);
 }
 
-.table-pagination {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  margin-top: 16px;
-}
-.table-pagination-info {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text-secondary);
-  min-width: 48px;
-  text-align: center;
-}
 :deep(.study-row-dragging) {
   opacity: 0.5;
 }

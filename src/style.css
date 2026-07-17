@@ -408,3 +408,37 @@ body {
 }
 
 
+
+/* ==================== 通用表单字段（弹窗/备份页共用） ==================== */
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.form-field-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+.form-field-error {
+  font-size: 12px;
+  color: var(--error);
+  font-weight: 700;
+  margin-top: 2px;
+}
+
+/* ==================== 表格分页（学习/赚钱共用） ==================== */
+.table-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 16px;
+}
+.table-pagination-info {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  min-width: 48px;
+  text-align: center;
+}

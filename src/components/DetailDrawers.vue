@@ -121,37 +121,43 @@ const normalizeLink = (url?: string) => {
 
 <style scoped>
 .drawer-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
+  padding: 10px 6px;
 }
 .drawer-detail-head {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 18px;
+  margin-bottom: 24px;
 }
 .drawer-detail-title {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 800;
   color: var(--text);
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 .drawer-detail-section {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  background: var(--bg-content);
+  border: 2px solid var(--border);
+  border-radius: 18px;
+  padding: 18px;
+  margin-bottom: 16px;
+  color: var(--text);
+  line-height: 1.8;
 }
 .drawer-detail-label {
   font-size: 13px;
-  color: var(--text-secondary);
   font-weight: 700;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+  text-transform: uppercase;
 }
 .drawer-detail-link {
-  color: var(--primary);
-  text-decoration: none;
+  color: #2b6cb0;
+  font-weight: 700;
+  text-decoration: underline;
   word-break: break-all;
 }
 .drawer-detail-link:hover {
-  text-decoration: underline;
+  color: #1a4d8a;
 }
 </style>
