@@ -39,13 +39,14 @@ import { useDetailDrawers } from '@/composables/useDetailDrawers';
 import { useDeleteConfirm } from '@/composables/useDeleteConfirm';
 import { todayStr, formatDateStr } from '@/utils/date';
 import { sanitizeHtml } from '@/utils/sanitize';
-import { studyTypeText, statusText, categoryName } from '@/utils/labels';
+import { studyTypeText, statusText } from '@/utils/labels';
 import type { StudyItem, MoneyItem, WeightRecord, TaskItem } from '@/types';
 import type { CustomSelectOption } from '@/components/CustomSelect.vue';
 import DatePickerModal from '@/components/DatePickerModal.vue';
 import CustomSelect from '@/components/CustomSelect.vue';
 import DetailDrawers from '@/components/DetailDrawers.vue';
 import DeleteConfirmModal from '@/components/DeleteConfirmModal.vue';
+import TodayPanel from '@/components/panels/TodayPanel.vue';
 
 use([CanvasRenderer, PieChart, TooltipComponent, LegendComponent, TitleComponent, LabelLayout]);
 
@@ -887,12 +888,6 @@ const pendingIncome = computed(() =>
   moneyItems.filter((m: MoneyItem) => m.status !== 'done').reduce((s, m) => s + m.amount, 0)
 );
 
-const displayTodayLogs = computed(() =>
-  todayLogs
-    .filter((log) => log.date && log.date === todayStr())
-    .sort((a, b) => a.time.localeCompare(b.time))
-);
-
 const inspirationLogs = computed(() =>
   [...inspirations].sort(
     (a, b) => `${b.date}T${b.time}`.localeCompare(`${a.date}T${a.time}`)
@@ -903,38 +898,6 @@ const deleteInspiration = (id: number) => {
   const idx = inspirations.findIndex((item) => item.id === id);
   if (idx !== -1) inspirations.splice(idx, 1);
 };
-
-const todayReport = computed(() => {
-  const logs = displayTodayLogs.value;
-  if (logs.length === 0) {
-    return '今天还没有记录，去健康/学习/赚钱页面添加吧 🌿';
-  }
-  const healthCount = logs.filter((l) => l.category === 'health').length;
-  const studyAdd = logs.filter((l) => l.category === 'study' && l.content.startsWith('添加')).length;
-  const studyUpdate = logs.filter((l) => l.category === 'study' && l.content.startsWith('更新')).length;
-  const studyDelete = logs.filter((l) => l.category === 'study' && l.content.startsWith('删除')).length;
-  const moneyAdd = logs.filter((l) => l.category === 'money' && l.content.startsWith('添加')).length;
-  const moneyUpdate = logs.filter((l) => l.category === 'money' && l.content.startsWith('更新')).length;
-  const moneyDelete = logs.filter((l) => l.category === 'money' && l.content.startsWith('删除')).length;
-
-  const parts: string[] = [];
-  if (healthCount) parts.push(`记录体重 ${healthCount} 次`);
-  if (studyAdd || studyUpdate || studyDelete) {
-    const sub: string[] = [];
-    if (studyAdd) sub.push(`新增 ${studyAdd} 项`);
-    if (studyUpdate) sub.push(`更新 ${studyUpdate} 项`);
-    if (studyDelete) sub.push(`删除 ${studyDelete} 项`);
-    parts.push(`学习${sub.join('、')}`);
-  }
-  if (moneyAdd || moneyUpdate || moneyDelete) {
-    const sub: string[] = [];
-    if (moneyAdd) sub.push(`新增 ${moneyAdd} 个`);
-    if (moneyUpdate) sub.push(`更新 ${moneyUpdate} 个`);
-    if (moneyDelete) sub.push(`删除 ${moneyDelete} 个`);
-    parts.push(`赚钱任务${sub.join('、')}`);
-  }
-  return `今天${parts.join('，')}。继续加油 🌿`;
-});
 
 /* ==================== Import / Export ==================== */
 const exportJson = ref('');
@@ -1484,33 +1447,7 @@ const submitInspiration = () => {
 
             <!-- 动态 -->
             <template #today>
-              <div class="two-col">
-                <div>
-                  <div class="panel-title">
-                    <span class="dot"></span>
-                    <Title color="app-pink" size="middle">今日时间线</Title>
-                  </div>
-                  <Card>
-                    <div class="timeline" style="height: 600px; overflow-y: auto;">
-                      <div v-for="(log, i) in displayTodayLogs" :key="i" class="timeline-item">
-                        <span class="timeline-dot" :class="log.category"></span>
-                        <div class="timeline-time">{{ log.time }} · {{ categoryName(log.category) }}</div>
-                        <div class="timeline-content">{{ log.content }}</div>
-                      </div>
-                    </div>
-                  </Card>
-                </div>
-
-                <div>
-                  <div class="panel-title">
-                    <span class="dot"></span>
-                    <Title color="app-yellow" size="middle">今日报告</Title>
-                  </div>
-                  <Card color="app-yellow">
-                    <p style="margin:0;line-height:1.7;">{{ todayReport }}</p>
-                  </Card>
-                </div>
-              </div>
+              <TodayPanel />
             </template>
 
             <!-- 灵感 -->
