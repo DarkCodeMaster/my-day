@@ -16,7 +16,8 @@ function createWindow() {
     minWidth: 900,
     minHeight: 600,
     autoHideMenuBar: true,
-    icon: path.join(__dirname, 'icon.png'),
+    // Windows 任务栏/标题栏用 ICO（PNG 在部分系统上任务栏会显示空白）；mac/Linux 用 PNG
+    icon: path.join(__dirname, process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
