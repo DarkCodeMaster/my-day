@@ -3,7 +3,7 @@ import type { MyDayState, WeightRecord, StudyItem, MoneyItem, TodayLog, TaskItem
 import { todayStr } from '@/utils/date';
 
 const STORAGE_KEY = 'myday';
-const CURRENT_VERSION = 2;
+const CURRENT_VERSION = 3;
 
 const SAMPLE_LOG_CONTENTS = new Set([
   '晨间体重 67.0 kg，比昨天 -0.3 kg 🎉',
@@ -55,6 +55,7 @@ export function migrateMyDayState(data: any): MyDayState {
     version: CURRENT_VERSION,
     activeTab: data.activeTab || 'health',
     chartRange: data.chartRange || '7d',
+    weightUnit: data.weightUnit === 'jin' ? 'jin' : 'kg',
     moneyPlan: data.moneyPlan || '',
     weights: Array.isArray(data.weights) ? data.weights : [],
     studyItems: Array.isArray(data.studyItems) ? data.studyItems : [],
@@ -73,6 +74,7 @@ export function migrateMyDayState(data: any): MyDayState {
  */
 const activeTab = ref('health');
 const chartRange = ref('7d');
+const weightUnit = ref<'kg' | 'jin'>('kg');
 const weights = reactive<WeightRecord[]>([]);
 const studyItems = reactive<StudyItem[]>([]);
 const moneyItems = reactive<MoneyItem[]>([]);
@@ -88,6 +90,7 @@ const saveState = () => {
       version: CURRENT_VERSION,
       activeTab: activeTab.value,
       chartRange: chartRange.value,
+      weightUnit: weightUnit.value,
       moneyPlan: moneyPlan.value,
       weights: [...weights],
       studyItems: [...studyItems],
@@ -103,7 +106,7 @@ const saveState = () => {
 };
 
 // 自动保存：模块加载时注册一次，与应用同寿命
-watch([activeTab, chartRange], saveState);
+watch([activeTab, chartRange, weightUnit], saveState);
 watch(weights, saveState, { deep: true });
 watch(studyItems, saveState, { deep: true });
 watch(moneyItems, saveState, { deep: true });
@@ -128,6 +131,7 @@ function ensureLoaded() {
       const saved = migrateMyDayState(parsed);
       activeTab.value = saved.activeTab;
       chartRange.value = saved.chartRange;
+      weightUnit.value = saved.weightUnit;
       moneyPlan.value = saved.moneyPlan;
       weights.splice(0, weights.length, ...saved.weights);
       studyItems.splice(0, studyItems.length, ...saved.studyItems);
@@ -150,6 +154,7 @@ export function useMyDayStorage() {
   return {
     activeTab,
     chartRange,
+    weightUnit,
     weights,
     studyItems,
     moneyItems,

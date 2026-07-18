@@ -8,9 +8,9 @@ import { usePanelUiState } from '@/composables/usePanelUiState';
 import { todayStr, formatDateStr } from '@/utils/date';
 import type { WeightRecord } from '@/types';
 
-const { weights, chartRange } = useMyDayStorage();
+const { weights, chartRange, weightUnit } = useMyDayStorage();
 const { pushTodayLog } = useTodayLog();
-const { currentMonth, selectedDate, newWeightDate, weightUnit } = usePanelUiState();
+const { currentMonth, selectedDate, newWeightDate } = usePanelUiState();
 
 const newWeightValue = ref('');
 const chartOptions: SelectOption[] = [

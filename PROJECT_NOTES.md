@@ -13,7 +13,7 @@
 - **富文本**：@vueup/vue-quill + DOMPurify（XSS 消毒）
 - **图表**：ECharts 6（按需引入）
 - **样式**：CSS 变量 + 组件库自带 Less 样式
-- **数据持久化**：`localStorage`，key 为 `myday`，schema v2（含版本迁移）
+- **数据持久化**：`localStorage`，key 为 `myday`，schema v3（含版本迁移）
 
 ## 目录结构
 
@@ -113,9 +113,9 @@ npm run icon              # 从 public/sun.png 重新生成打包图标
 | 任务时段/截止工具 | `utils/task.ts`（getCurrentTimeSlot/isDeadlineWithinDays/parseTaskLink/formatTaskLink） |
 | 文案 | `utils/labels.ts`（studyTypeText/statusText/categoryName） |
 
-### 4. 数据兼容（v1 → v2）
+### 4. 数据兼容（v1 → v3）
 
-`migrateMyDayState()`（在 useMyDayStorage.ts）统一处理本地加载与 JSON 导入：`moneyItems.plan → description`、旧 todayLogs 中的灵感提取到 `inspirations`、日志补 `date`、过滤示例数据、缺失字段补默认值。保存/导出写 `version: 2`。
+`migrateMyDayState()`（在 useMyDayStorage.ts）统一处理本地加载与 JSON 导入：`moneyItems.plan → description`、旧 todayLogs 中的灵感提取到 `inspirations`、日志补 `date`、过滤示例数据、缺失字段补默认值（v3 新增 weightUnit 体重单位，默认 kg）。保存/导出写 `version: 3`。
 
 ### 5. Modal 使用注意
 

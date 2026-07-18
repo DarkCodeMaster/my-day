@@ -7,6 +7,7 @@ import { todayStr } from '@/utils/date';
 const {
   activeTab,
   chartRange,
+  weightUnit,
   weights,
   studyItems,
   moneyItems,
@@ -105,6 +106,9 @@ const validateImportData = (data: any): { valid: false; error: string } | { vali
   if (data.chartRange != null && typeof data.chartRange !== 'string') {
     return { valid: false, error: 'chartRange 必须是字符串' };
   }
+  if (data.weightUnit != null && data.weightUnit !== 'kg' && data.weightUnit !== 'jin') {
+    return { valid: false, error: 'weightUnit 必须是 kg 或 jin' };
+  }
 
   return { valid: true, data };
 };
@@ -141,6 +145,7 @@ const executeImport = () => {
 
     activeTab.value = migrated.activeTab;
     chartRange.value = migrated.chartRange;
+    weightUnit.value = migrated.weightUnit;
     moneyPlan.value = migrated.moneyPlan;
     weights.splice(0, weights.length, ...migrated.weights);
     studyItems.splice(0, studyItems.length, ...migrated.studyItems);

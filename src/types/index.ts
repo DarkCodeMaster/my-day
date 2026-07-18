@@ -60,6 +60,7 @@ export interface MyDayState {
   version: number;
   activeTab: string;
   chartRange: string;
+  weightUnit: 'kg' | 'jin';
   moneyPlan: string;
   weights: WeightRecord[];
   studyItems: StudyItem[];
