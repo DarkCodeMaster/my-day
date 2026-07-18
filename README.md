@@ -139,25 +139,71 @@ MyDay/
 ├── public/
 │   └── sun.png            # 应用装饰图 / 图标源图
 ├── src/
-│   ├── main.ts            # 应用入口
-│   ├── App.vue            # 主页面（全部模块逻辑与模板）
+│   ├── main.ts            # 应用入口（含 Quill snow 样式）
+│   ├── App.vue            # 应用壳：动态背景、页头、Tabs 容器、全局弹层
 │   ├── style.css          # 全局样式与组件库覆盖
+│   ├── lib/
+│   │   └── echarts.ts            # ECharts 按需注册（只注册一次）
 │   ├── components/
 │   │   ├── CustomSelect.vue      # 自定义下拉（Teleport 到 body，弹窗内不裁剪）
-│   │   └── DatePickerModal.vue   # 动森风格日期选择弹窗
+│   │   ├── DatePickerModal.vue   # 动森风格日期选择弹窗
+│   │   ├── DetailDrawers.vue     # 学习/赚钱详情抽屉（跨面板共享）
+│   │   ├── DeleteConfirmModal.vue# 共享删除确认弹窗
+│   │   ├── InspirationComposer.vue # 💡 浮动按钮 + 灵感记录弹窗（根级）
+│   │   └── panels/               # 7 个 Tab 面板
+│   │       ├── TasksPanel.vue        # 任务看板 + 任务弹窗 + 时段分布图
+│   │       ├── HealthPanel.vue       # 体重日历 + 趋势曲线
+│   │       ├── StudyPanel.vue        # 学习表格 + 添加/编辑弹窗
+│   │       ├── MoneyPanel.vue        # 汇总卡 + 任务表/日历/规划三视图
+│   │       ├── TodayPanel.vue        # 今日时间线 + 今日报告
+│   │       ├── InspirationPanel.vue  # 灵感列表
+│   │       └── BackupPanel.vue       # 导入/导出/清空
 │   ├── composables/
-│   │   └── useMyDayStorage.ts    # localStorage 读写 + v1→v2 数据迁移
+│   │   ├── useMyDayStorage.ts    # localStorage 读写 + v1→v2 迁移（模块级单例）
+│   │   ├── useTodayLog.ts        # 今日动态写入
+│   │   ├── useDetailDrawers.ts   # 详情抽屉状态（单例）
+│   │   ├── useDeleteConfirm.ts   # 删除确认状态（单例，含级联删任务）
+│   │   ├── useTaskMoneySync.ts   # 赚钱任务 → 看板任务自动同步
+│   │   └── usePanelUiState.ts    # 面板视图状态单例（切 Tab 不丢）
 │   ├── types/
 │   │   └── index.ts              # 全部数据模型定义
 │   └── utils/
 │       ├── date.ts               # 日期格式化（Asia/Shanghai）
+│       ├── task.ts               # 任务时段/截止判定、关联解析
+│       ├── labels.ts             # 文案函数（类型/状态/分类名）
 │       └── sanitize.ts           # DOMPurify 富文本消毒
 └── release/               # 打包产物（win-unpacked 为中间目录，可删）
 ```
 
+## 架构说明
+
+### 状态单例
+
+`useMyDayStorage()` 返回的是**模块级单例**状态（state 定义在模块作用域，`ensureLoaded` 有 flag 防重，自动保存 watch 在模块加载时注册一次）。任何组件/composable 调用拿到的都是同一份数据。
+
+> ⚠️ reactive 数组（weights/studyItems/moneyItems/todayLogs/tasks/inspirations）只能 `splice`/`push`/改属性，**禁止整体重新赋值**，否则其他组件持有的引用会断开。
+
+### 跨模块依赖
+
+| 依赖 | 提供方 | 使用方 |
+|------|--------|--------|
+| `pushTodayLog` | useTodayLog | health / study / money / 删除确认 |
+| `openDetail` / `openMoneyDetail` | useDetailDrawers | study 表格 / money 表格、日历 / 任务关联链接 |
+| `openDelete` | useDeleteConfirm | study / money 表格 |
+| `autoCreateTodayTaskFromMoney` / `syncAutoTodayTaskForMoney` | useTaskMoneySync | money 添加/编辑 → 任务看板 |
+
+### Tabs 卸载行为
+
+组件库 `Tabs` 用 `v-if` 只渲染激活面板，**面板组件切 Tab 即卸载**。因此面板的视图状态（筛选、页码、日历月份等）放在 `usePanelUiState` 单例中保持；表单、弹窗开关等瞬态留在组件内。跨面板可达的弹层（详情抽屉、删除确认、💡 灵感按钮）必须挂在 App 根组件。
+
+### z-index 层级
+
+Loading 9999 > DatePickerModal 1200 > 任务弹窗 1100 > 普通弹窗 / 💡 按钮 1000
+
+
 ## 数据与持久化
 
-所有数据存储在 localStorage（key：`myday`），当前 schema 版本为 **v2**。
+所有数据存储在 localStorage（key：`myday`），当前 schema 版本为 **v2**。状态为模块级单例，自动保存 watch 在模块加载时注册一次。
 
 ### v2 存储结构
 
