@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
-import { Button, Input, Card, Title, Select, Tooltip } from 'animal-island-vue';
+import { ref, computed, watch } from 'vue';
+import { Button, Input, Card, Title, Select, Switch, Tooltip } from 'animal-island-vue';
 import type { SelectOption } from 'animal-island-vue';
 import { useMyDayStorage } from '@/composables/useMyDayStorage';
 import { useTodayLog } from '@/composables/useTodayLog';
@@ -10,7 +10,7 @@ import type { WeightRecord } from '@/types';
 
 const { weights, chartRange } = useMyDayStorage();
 const { pushTodayLog } = useTodayLog();
-const { currentMonth, selectedDate, newWeightDate } = usePanelUiState();
+const { currentMonth, selectedDate, newWeightDate, weightUnit } = usePanelUiState();
 
 const newWeightValue = ref('');
 const chartOptions: SelectOption[] = [
@@ -19,9 +19,25 @@ const chartOptions: SelectOption[] = [
   { key: 'all', label: '全部' },
 ];
 
+/* ---------- 单位切换（kg 存储，斤仅显示换算 1kg = 2斤） ---------- */
+const isJin = computed({
+  get: () => weightUnit.value === 'jin',
+  set: (v: boolean) => { weightUnit.value = v ? 'jin' : 'kg'; },
+});
+const unitLabel = computed(() => (weightUnit.value === 'jin' ? '斤' : 'kg'));
+const displayWeight = (kg: number) =>
+  weightUnit.value === 'jin' ? Number((kg * 2).toFixed(1)) : kg;
+// 切换单位时，把输入框里的数值同步换算，避免输入错位
+watch(weightUnit, (unit) => {
+  const v = parseFloat(newWeightValue.value);
+  if (isNaN(v)) return;
+  newWeightValue.value = String(unit === 'jin' ? Number((v * 2).toFixed(1)) : Number((v / 2).toFixed(2)));
+});
+
 const addWeight = () => {
-  const val = parseFloat(newWeightValue.value);
-  if (!newWeightDate.value || isNaN(val)) return;
+  const input = parseFloat(newWeightValue.value);
+  if (!newWeightDate.value || isNaN(input)) return;
+  const val = weightUnit.value === 'jin' ? Number((input / 2).toFixed(2)) : input;
   const idx = weights.findIndex((w: WeightRecord) => w.date === newWeightDate.value);
   const existed = idx > -1;
   if (existed) weights[idx].weight = val;
@@ -33,13 +49,13 @@ const addWeight = () => {
   const prev = weights
     .filter((w: WeightRecord) => w.date < todayStr())
     .sort((a: WeightRecord, b: WeightRecord) => b.date.localeCompare(a.date))[0];
-  let content = `${existed ? '更新' : '记录'}体重 ${val} kg`;
+  let content = `${existed ? '更新' : '记录'}体重 ${displayWeight(val)} ${unitLabel.value}`;
   if (!isToday) {
     content += `（${newWeightDate.value}）`;
   }
   if (isToday && prev) {
-    const diff = Number((val - prev.weight).toFixed(1));
-    content += `，比昨天 ${diff > 0 ? '+' : ''}${diff} kg ${diff < 0 ? '🎉' : ''}`;
+    const diff = Number((displayWeight(val) - displayWeight(prev.weight)).toFixed(1));
+    content += `，比昨天 ${diff > 0 ? '+' : ''}${diff} ${unitLabel.value} ${diff < 0 ? '🎉' : ''}`;
   }
   pushTodayLog('health', content);
 };
@@ -143,7 +159,7 @@ const chartComputed = computed(() => {
           <Tooltip v-for="(day, i) in calendarDays" :key="i" variant="island" placement="top">
             <template #title>
               {{ day.date }}<br />
-              体重：{{ day.weight ?? '未记录' }} kg
+              体重：{{ day.weight == null ? '未记录' : displayWeight(day.weight) }} {{ day.weight == null ? 'kg' : unitLabel }}
             </template>
             <div
               class="calendar-cell"
@@ -151,14 +167,20 @@ const chartComputed = computed(() => {
               @click="selectDay(day)"
             >
               <span>{{ day.day }}</span>
-              <span v-if="day.weight" class="weight">{{ day.weight }}</span>
+              <span v-if="day.weight" class="weight">{{ displayWeight(day.weight) }}</span>
             </div>
           </Tooltip>
         </div>
         <div style="margin-top:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
           <Input v-model="newWeightDate" size="middle" style="width:150px" />
-          <Input v-model="newWeightValue" size="middle" placeholder="体重 kg" style="width:120px" />
+          <Input v-model="newWeightValue" size="middle" :placeholder="`体重 ${unitLabel}`" style="width:120px" />
           <Button type="primary" size="middle" @click="addWeight">记录</Button>
+        </div>
+        <div style="margin-top:14px;display:flex;justify-content:flex-start;">
+          <Switch v-model="isJin" class="unit-switch">
+            <template #checked>斤</template>
+            <template #unchecked>公斤</template>
+          </Switch>
         </div>
       </Card>
     </div>
@@ -182,7 +204,7 @@ const chartComputed = computed(() => {
             <g v-for="(d, i) in chartComputed.data" :key="i">
               <circle class="chart-dot" :cx="chartComputed.x(d.date)" :cy="chartComputed.y(d.weight)" r="5" />
               <text class="chart-text" :x="chartComputed.x(d.date)" :y="chartComputed.h - 10" text-anchor="middle">{{ d.label }}</text>
-              <text class="chart-text" :x="chartComputed.x(d.date)" :y="chartComputed.y(d.weight) - 10" text-anchor="middle">{{ d.weight }}</text>
+              <text class="chart-text" :x="chartComputed.x(d.date)" :y="chartComputed.y(d.weight) - 10" text-anchor="middle">{{ displayWeight(d.weight) }}</text>
             </g>
           </svg>
           <div v-else class="animal-table-empty" style="padding:40px 0;">暂无数据</div>

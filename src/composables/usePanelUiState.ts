@@ -11,6 +11,7 @@ import { todayStr } from '@/utils/date';
 const currentMonth = ref(new Date());
 const selectedDate = ref(todayStr());
 const newWeightDate = ref(todayStr());
+const weightUnit = ref<'kg' | 'jin'>('kg');
 
 // 学习
 const studyType = ref('all');
@@ -29,6 +30,7 @@ export function usePanelUiState() {
     currentMonth,
     selectedDate,
     newWeightDate,
+    weightUnit,
     // study
     studyType,
     showCompletedStudy,

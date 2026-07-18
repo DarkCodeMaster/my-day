@@ -224,22 +224,27 @@ body {
   pointer-events: auto;
 }
 
-.animal-switch.study-switch {
+.animal-switch.study-switch,
+.animal-switch.unit-switch {
   min-width: 92px;
   height: 40px;
 }
-.animal-switch.study-switch .animal-switch__handle {
+.animal-switch.study-switch .animal-switch__handle,
+.animal-switch.unit-switch .animal-switch__handle {
   width: 32px;
   height: 32px;
 }
-.animal-switch.study-switch.animal-switch--checked .animal-switch__handle {
+.animal-switch.study-switch.animal-switch--checked .animal-switch__handle,
+.animal-switch.unit-switch.animal-switch--checked .animal-switch__handle {
   left: calc(100% - 35px);
 }
-.animal-switch.study-switch .animal-switch__inner {
+.animal-switch.study-switch .animal-switch__inner,
+.animal-switch.unit-switch .animal-switch__inner {
   padding: 0 12px 0 38px;
   font-size: 14px;
 }
-.animal-switch.study-switch.animal-switch--checked .animal-switch__inner {
+.animal-switch.study-switch.animal-switch--checked .animal-switch__inner,
+.animal-switch.unit-switch.animal-switch--checked .animal-switch__inner {
   padding: 0 38px 0 12px;
 }
 
