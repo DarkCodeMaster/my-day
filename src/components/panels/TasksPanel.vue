@@ -133,11 +133,19 @@ const openTaskLink = (task: TaskItem) => {
 
 /* ---------- 看板拖拽 ---------- */
 const draggingTaskId = ref<number | null>(null);
+const dragOverTaskId = ref<number | null>(null);
+const dragOverPosition = ref<'top' | 'bottom'>('top');
+
+const clearDragState = () => {
+  draggingTaskId.value = null;
+  dragOverTaskId.value = null;
+};
+
 const handleDragStart = (task: TaskItem) => {
   draggingTaskId.value = task.id;
 };
 const handleDragEnd = () => {
-  draggingTaskId.value = null;
+  clearDragState();
 };
 const handleDrop = (status: 'today' | 'todo' | 'doing' | 'done') => {
   if (draggingTaskId.value == null) return;
@@ -150,7 +158,37 @@ const handleDrop = (status: 'today' | 'todo' | 'doing' | 'done') => {
       task.completedAt = undefined;
     }
   }
-  draggingTaskId.value = null;
+  clearDragState();
+};
+
+/** 卡片上拖动：按鼠标在卡片上下半区判定插入位置 */
+const handleCardDragOver = (task: TaskItem, e: DragEvent) => {
+  e.preventDefault();
+  if (draggingTaskId.value == null || draggingTaskId.value === task.id) return;
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+  dragOverTaskId.value = task.id;
+  dragOverPosition.value = e.clientY < rect.top + rect.height / 2 ? 'top' : 'bottom';
+};
+
+/** 落到某张卡片上：插入到其上方或下方（跨列时同步状态） */
+const handleCardDrop = (target: TaskItem, e: DragEvent) => {
+  e.preventDefault();
+  e.stopPropagation();
+  if (draggingTaskId.value == null || draggingTaskId.value === target.id) return;
+  const fromIdx = tasks.findIndex((t: TaskItem) => t.id === draggingTaskId.value);
+  if (fromIdx === -1) return;
+
+  const [moved] = tasks.splice(fromIdx, 1);
+  // 跨列时同步状态与完成时间；同列排序不动 completedAt
+  if (moved.status !== target.status) {
+    moved.status = target.status;
+    moved.completedAt = target.status === 'done' ? new Date().toISOString() : undefined;
+  }
+  // 移除后目标索引可能前移，重新定位插入点
+  const baseIdx = tasks.findIndex((t: TaskItem) => t.id === target.id);
+  const insertIdx = dragOverPosition.value === 'bottom' ? baseIdx + 1 : baseIdx;
+  tasks.splice(insertIdx, 0, moved);
+  clearDragState();
 };
 
 /* ---------- 时段分布图 ---------- */
@@ -293,10 +331,17 @@ onBeforeUnmount(disposeTaskChart);
             v-for="task in tasks.filter((t: TaskItem) => t.status === col.key)"
             :key="task.id"
             class="kanban-card"
-            :class="{ 'is-dragging': draggingTaskId === task.id, 'is-urgent': isDeadlineWithinDays(task.deadline, 3) }"
+            :class="{
+              'is-dragging': draggingTaskId === task.id,
+              'is-urgent': isDeadlineWithinDays(task.deadline, 3),
+              'drop-above': dragOverTaskId === task.id && dragOverPosition === 'top',
+              'drop-below': dragOverTaskId === task.id && dragOverPosition === 'bottom',
+            }"
             draggable="true"
             @dragstart="handleDragStart(task)"
             @dragend="handleDragEnd"
+            @dragover="handleCardDragOver(task, $event)"
+            @drop="handleCardDrop(task, $event)"
             @click="openEditTask(task)"
           >
             <div class="kanban-card-title">{{ task.title }}</div>
@@ -506,6 +551,12 @@ onBeforeUnmount(disposeTaskChart);
 }
 .kanban-card.is-urgent:hover {
   border-color: var(--error-active);
+}
+.kanban-card.drop-above {
+  box-shadow: 0 -3px 0 0 var(--primary), 0 2px 0 rgba(114, 93, 66, 0.06);
+}
+.kanban-card.drop-below {
+  box-shadow: 0 3px 0 0 var(--primary), 0 2px 0 rgba(114, 93, 66, 0.06);
 }
 .kanban-card-title {
   font-weight: 800;
