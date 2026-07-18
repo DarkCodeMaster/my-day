@@ -57,8 +57,6 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  // Windows 任务栏图标按 AppUserModelId 归组，需与 package.json 的 appId 一致
-  app.setAppUserModelId('com.example.myday');
   createWindow();
 
   app.on('activate', () => {

@@ -27,11 +27,14 @@ fs.mkdirSync(outDir, { recursive: true });
 const pngImage = image.clone().resize({ w: 512, h: 512 });
 await pngImage.write(pngOut);
 
-// Windows 用 256x256 ICO
-const icoImage = image.clone().resize({ w: 256, h: 256 });
-const icoPngBuffer = await icoImage.getBuffer('image/png');
-const ico = await pngToIco([icoPngBuffer]);
+// Windows 用多尺寸 ICO（任务栏/标题栏需要 16-48 小尺寸，资源管理器需要 256）
+const icoBuffers = await Promise.all(
+  [16, 24, 32, 48, 256].map((size) =>
+    image.clone().resize({ w: size, h: size }).getBuffer('image/png')
+  )
+);
+const ico = await pngToIco(icoBuffers);
 fs.writeFileSync(icoOut, ico);
 
 console.log(`icon.png written: ${pngOut} (512x512)`);
-console.log(`icon.ico written: ${icoOut} (256x256)`);
+console.log(`icon.ico written: ${icoOut} (16/24/32/48/256)`);
