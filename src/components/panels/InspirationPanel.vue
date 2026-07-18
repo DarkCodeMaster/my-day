@@ -43,16 +43,18 @@ const deleteInspiration = (id: number) => {
 <style scoped>
 .inspiration-delete {
   cursor: pointer;
-  color: var(--text-muted);
-  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  color: var(--text-secondary);
+  font-size: 32px;
   line-height: 1;
-  padding: 4px 8px;
-  border-radius: 8px;
-  transition: all 0.2s;
-  flex-shrink: 0;
+  user-select: none;
+  transition: color 0.2s;
 }
 .inspiration-delete:hover {
   color: var(--error);
-  background: rgba(220, 80, 80, 0.12);
 }
 </style>
