@@ -186,11 +186,13 @@ let pressX = 0;
 let pressY = 0;
 
 collapsedEl.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0) return; // 只响应左键：右键留给原生菜单，不触发展开/拖动
   pressing = true;
   dragging = false;
   pressX = e.screenX;
   pressY = e.screenY;
-  collapsedEl.setPointerCapture(e.pointerId); // 拖出窗口也能持续接收事件
+  // mac 上 pointer capture 可能失效，try 兜底（失效时靠 window 级 pointerup 结束拖动）
+  try { collapsedEl.setPointerCapture(e.pointerId); } catch { /* noop */ }
 });
 
 collapsedEl.addEventListener('pointermove', (e) => {
@@ -202,7 +204,7 @@ collapsedEl.addEventListener('pointermove', (e) => {
   }
 });
 
-collapsedEl.addEventListener('pointerup', () => {
+const endPress = () => {
   if (!pressing) return;
   pressing = false;
   if (dragging) {
@@ -210,6 +212,15 @@ collapsedEl.addEventListener('pointerup', () => {
     window.floatingAPI.dragEnd();
   } else {
     expand();
+  }
+};
+collapsedEl.addEventListener('pointerup', endPress);
+// 兜底：capture 失效时，在窗口任意位置松开也能结束（capture 阶段，与上行互斥靠 pressing 标志）
+window.addEventListener('pointerup', endPress, true);
+collapsedEl.addEventListener('lostpointercapture', () => {
+  if (dragging) {
+    dragging = false;
+    window.floatingAPI.dragEnd();
   }
 });
 

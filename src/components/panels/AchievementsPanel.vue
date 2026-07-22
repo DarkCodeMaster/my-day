@@ -1,12 +1,23 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { Button, Card, Drawer, Modal, Progress, Tag, Title } from 'animal-island-vue';
+import { Button, Card, Drawer, Modal, Progress, Tag, Title, Notification } from 'animal-island-vue';
 import { useMyDayStorage } from '@/composables/useMyDayStorage';
 import { useAchievements, ACHIEVEMENT_MODULE_LABELS, TIER_LABELS } from '@/composables/useAchievements';
 import type { AchievementModule, AchievementTier } from '@/composables/useAchievements';
+import { celebrate } from '@/composables/useCelebration';
 import { sanitizeHtml } from '@/utils/sanitize';
 import { formatDateStr, pad } from '@/utils/date';
 import type { ArchivedTask } from '@/types';
+
+/* 庆祝效果预览（用户明确要求保留，说删再删）：与真实解锁完全一致的 通知+烟花 */
+const previewUnlock = (tier: AchievementTier, name: string, desc: string) => {
+  Notification.open({
+    message: `🏆 成就解锁「${name}」`,
+    description: desc,
+    duration: 3, // 单位：秒
+  });
+  celebrate(tier);
+};
 
 const { archivedTasks } = useMyDayStorage();
 const { list, stats, unlockedCount, totalCount } = useAchievements();
@@ -89,7 +100,14 @@ const LINK_TYPE_LABELS: Record<string, string> = {
   <div class="section">
     <div class="section-head">
       <Title color="app-orange" size="middle">成就殿堂</Title>
-      <Button type="text" size="small" @click="archiveDrawerOpen = true">📦 历史归档 ({{ archivedTasks.length }})</Button>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <!-- 庆祝效果预览（保留） -->
+        <Button type="text" size="small" @click="previewUnlock('bronze', '初露锋芒', '累计完成 1 个任务')">🥉</Button>
+        <Button type="text" size="small" @click="previewUnlock('silver', '日理万机', '一天内完成 5 个任务')">🥈</Button>
+        <Button type="text" size="small" @click="previewUnlock('gold', '任务大师', '累计完成 100 个任务')">🥇</Button>
+        <Button type="text" size="small" @click="previewUnlock('platinum', '岛屿传说', '累计完成 200 个任务')">👑</Button>
+        <Button type="text" size="small" @click="archiveDrawerOpen = true">📦 历史归档 ({{ archivedTasks.length }})</Button>
+      </div>
     </div>
 
     <div class="summary-grid">

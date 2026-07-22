@@ -132,6 +132,8 @@ function createFloatingWindow() {
     y: pos.y,
     frame: false,
     transparent: true,
+    // macOS 必须显式设置透明背景色（默认 #FFF 会盖成白底，Windows 无此问题）
+    backgroundColor: '#00000000',
     resizable: false,
     alwaysOnTop: true,
     skipTaskbar: true,
@@ -149,6 +151,14 @@ function createFloatingWindow() {
 
   // 位置保存时机：拖拽结束 + 窗口关闭（展开/收起时的程序性位移不落盘）
   floatingWindow.on('close', saveFloatingPosition);
+  // 兜底：失焦时若拖拽定时器仍在跑则停掉（mac 上 pointerup 可能丢失导致太阳黏住光标）
+  floatingWindow.on('blur', () => {
+    if (floatingDragTimer) {
+      clearInterval(floatingDragTimer);
+      floatingDragTimer = null;
+      floatingDragAnchor = null;
+    }
+  });
   floatingWindow.on('closed', () => {
     floatingWindow = null;
     // 浮动窗是应用最后的驻留形态，它被销毁才真正退出
