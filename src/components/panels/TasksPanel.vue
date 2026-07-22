@@ -14,20 +14,128 @@ import {
   isDeadlineWithinDays,
   parseTaskLink,
   formatTaskLink,
+  KANBAN_COLOR_OPTIONS,
+  createDefaultColumns,
 } from '@/utils/task';
-import type { StudyItem, MoneyItem, TaskItem } from '@/types';
+import type { StudyItem, MoneyItem, TaskItem, KanbanColumn } from '@/types';
 import CustomSelect from '@/components/CustomSelect.vue';
 import DatePickerModal from '@/components/DatePickerModal.vue';
 
-const { tasks, studyItems, moneyItems } = useMyDayStorage();
+const { tasks, studyItems, moneyItems, boards, activeBoardId, cardDisplay } = useMyDayStorage();
 const { openDetail, openMoneyDetail } = useDetailDrawers();
 
-const taskColumns = [
-  { key: 'today', label: '今日任务', color: 'app-red' },
-  { key: 'todo', label: '待开始', color: 'app-yellow' },
-  { key: 'doing', label: '进行中', color: 'app-blue' },
-  { key: 'done', label: '已完成', color: 'app-green' },
-] as const;
+/* ---------- 当前看板与列 ---------- */
+const activeBoard = computed(() => boards.find((b) => b.id === activeBoardId.value) ?? boards[0]);
+const activeColumns = computed(() => activeBoard.value?.columns ?? []);
+const todayColumnId = computed(() =>
+  activeColumns.value.find((c) => c.isToday)?.id ?? activeColumns.value[0]?.id ?? ''
+);
+const firstNonTodayColumnId = computed(() =>
+  activeColumns.value.find((c) => !c.isToday)?.id ?? todayColumnId.value
+);
+const isDoneColumn = (colId: string) =>
+  !!activeColumns.value.find((c) => c.id === colId)?.isDone;
+
+/* ---------- 看板管理 ---------- */
+const boardOptions = computed(() => boards.map((b) => ({ key: b.id, label: b.name })));
+const boardManagerOpen = ref(false);
+const boardDeleteTarget = ref<{ id: string; name: string; taskCount: number } | null>(null);
+
+const createBoard = () => {
+  const ts = Date.now();
+  const board = {
+    id: `board-${ts}`,
+    name: '新看板',
+    columns: createDefaultColumns(`-${ts}`),
+  };
+  boards.push(board);
+  activeBoardId.value = board.id;
+};
+
+const requestDeleteBoard = (id: string) => {
+  if (boards.length <= 1) return;
+  const board = boards.find((b) => b.id === id);
+  if (!board) return;
+  const taskCount = tasks.filter((t) => t.boardId === id).length;
+  boardDeleteTarget.value = { id, name: board.name, taskCount };
+};
+
+const confirmDeleteBoard = () => {
+  const target = boardDeleteTarget.value;
+  if (!target) return;
+  // 级联删除看板内任务
+  for (let i = tasks.length - 1; i >= 0; i--) {
+    if (tasks[i].boardId === target.id) tasks.splice(i, 1);
+  }
+  const idx = boards.findIndex((b) => b.id === target.id);
+  if (idx > -1) boards.splice(idx, 1);
+  if (activeBoardId.value === target.id) {
+    activeBoardId.value = boards[0]?.id ?? 'default';
+  }
+  boardDeleteTarget.value = null;
+};
+
+/* ---------- 列设置 ---------- */
+const columnSettingsOpen = ref(false);
+const columnDeleteTarget = ref<{ colId: string; label: string; taskCount: number } | null>(null);
+
+const columnSemantic = (col: KanbanColumn) => (col.isToday ? 'today' : col.isDone ? 'done' : 'none');
+const setColumnSemantic = (col: KanbanColumn, value: string) => {
+  const board = activeBoard.value;
+  if (!board) return;
+  // 语义标记互斥且每板至多各一个：先清掉其他列的同名标记
+  board.columns.forEach((c) => {
+    if (value === 'today') c.isToday = false;
+    if (value === 'done') c.isDone = false;
+  });
+  col.isToday = value === 'today';
+  col.isDone = value === 'done';
+};
+
+const moveColumn = (index: number, direction: -1 | 1) => {
+  const cols = activeBoard.value?.columns;
+  if (!cols) return;
+  const target = index + direction;
+  if (target < 0 || target >= cols.length) return;
+  const [moved] = cols.splice(index, 1);
+  cols.splice(target, 0, moved);
+};
+
+const addColumn = () => {
+  const board = activeBoard.value;
+  if (!board) return;
+  const color = KANBAN_COLOR_OPTIONS[board.columns.length % KANBAN_COLOR_OPTIONS.length].key;
+  board.columns.push({ id: `col-${Date.now()}`, label: '新列', color });
+};
+
+const requestDeleteColumn = (col: KanbanColumn) => {
+  if (!activeBoard.value || activeBoard.value.columns.length <= 1) return;
+  const taskCount = tasks.filter((t) => t.boardId === activeBoardId.value && t.status === col.id).length;
+  columnDeleteTarget.value = { colId: col.id, label: col.label, taskCount };
+};
+
+const confirmDeleteColumn = () => {
+  const target = columnDeleteTarget.value;
+  const board = activeBoard.value;
+  if (!target || !board) return;
+  const remaining = board.columns.filter((c) => c.id !== target.colId);
+  const fallbackId = remaining[0].id;
+  // 该列任务迁移到剩余第一列
+  tasks.forEach((t) => {
+    if (t.boardId === board.id && t.status === target.colId) t.status = fallbackId;
+  });
+  const idx = board.columns.findIndex((c) => c.id === target.colId);
+  const wasToday = board.columns[idx]?.isToday;
+  if (idx > -1) board.columns.splice(idx, 1);
+  // 删了今日列则把标记转移给剩余第一列
+  if (wasToday && !board.columns.some((c) => c.isToday)) {
+    board.columns[0].isToday = true;
+  }
+  columnDeleteTarget.value = null;
+};
+
+/* ---------- 卡片显示设置 ---------- */
+const cardDisplayOpen = ref(false);
 
 /* ---------- 新建/编辑任务 ---------- */
 const taskForm = reactive({
@@ -36,6 +144,7 @@ const taskForm = reactive({
   deadline: '',
   timeSlot: 'morning',
   linkKey: 'none',
+  boardId: 'default',
 });
 const resetTaskForm = () => {
   taskForm.title = '';
@@ -43,6 +152,7 @@ const resetTaskForm = () => {
   taskForm.deadline = '';
   taskForm.timeSlot = getCurrentTimeSlot();
   taskForm.linkKey = 'none';
+  taskForm.boardId = activeBoardId.value;
 };
 
 const taskLinkOptions = computed(() => {
@@ -81,6 +191,7 @@ const openEditTask = (task: TaskItem) => {
   taskForm.deadline = task.deadline || '';
   taskForm.timeSlot = task.timeSlot || getCurrentTimeSlot() || 'morning';
   taskForm.linkKey = formatTaskLink(task.linkType, task.linkId);
+  taskForm.boardId = task.boardId;
   taskModalMode.value = 'edit';
   taskModalOpen.value = true;
 };
@@ -99,8 +210,18 @@ const submitTask = () => {
     task.timeSlot = timeSlot;
     task.linkType = linkType;
     task.linkId = linkId;
+    // 跨看板移动：status 落到目标看板的第一列
+    if (task.boardId !== taskForm.boardId) {
+      const targetBoard = boards.find((b) => b.id === taskForm.boardId);
+      if (targetBoard) {
+        task.boardId = targetBoard.id;
+        task.status = targetBoard.columns[0].id;
+      }
+    }
   } else {
-    const status: TaskItem['status'] = deadline && isDeadlineWithinDays(deadline, 3) ? 'today' : 'todo';
+    const status = deadline && isDeadlineWithinDays(deadline, 3)
+      ? todayColumnId.value
+      : firstNonTodayColumnId.value;
     // 数组顺序即看板列内显示顺序，新任务插入到数组头部，显示在列顶部
     tasks.unshift({
       id: Date.now(),
@@ -109,6 +230,7 @@ const submitTask = () => {
       deadline,
       timeSlot,
       status,
+      boardId: activeBoardId.value,
       linkType,
       linkId,
     });
@@ -148,12 +270,12 @@ const handleDragStart = (task: TaskItem) => {
 const handleDragEnd = () => {
   clearDragState();
 };
-const handleDrop = (status: 'today' | 'todo' | 'doing' | 'done') => {
+const handleDrop = (status: string) => {
   if (draggingTaskId.value == null) return;
   const task = tasks.find((t: TaskItem) => t.id === draggingTaskId.value);
   if (task) {
     task.status = status;
-    if (status === 'done') {
+    if (isDoneColumn(status)) {
       task.completedAt = new Date().toISOString();
     } else {
       task.completedAt = undefined;
@@ -183,7 +305,7 @@ const handleCardDrop = (target: TaskItem, e: DragEvent) => {
   // 跨列时同步状态与完成时间；同列排序不动 completedAt
   if (moved.status !== target.status) {
     moved.status = target.status;
-    moved.completedAt = target.status === 'done' ? new Date().toISOString() : undefined;
+    moved.completedAt = isDoneColumn(target.status) ? new Date().toISOString() : undefined;
   }
   // 移除后目标索引可能前移，重新定位插入点
   const baseIdx = tasks.findIndex((t: TaskItem) => t.id === target.id);
@@ -205,7 +327,9 @@ const taskChartRef = ref<HTMLDivElement | null>(null);
 let taskChartInstance: any = null;
 let taskChartResizeObserver: ResizeObserver | null = null;
 
-const todayTasks = computed(() => tasks.filter((t: TaskItem) => t.status === 'today'));
+const todayTasks = computed(() =>
+  tasks.filter((t: TaskItem) => t.boardId === activeBoardId.value && t.status === todayColumnId.value)
+);
 const taskChartData = computed(() =>
   taskPeriods
     .map((period) => {
@@ -305,31 +429,39 @@ onBeforeUnmount(disposeTaskChart);
 <template>
   <div class="section">
     <div class="section-head">
-      <Title color="app-yellow" size="middle">任务看板</Title>
-      <Button type="primary" size="middle" @click="openTaskModal">新建任务</Button>
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+        <Title color="app-yellow" size="middle">任务看板</Title>
+        <CustomSelect v-model="activeBoardId" :options="boardOptions" />
+        <Button type="text" size="small" @click="boardManagerOpen = true">📋 管理</Button>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <Button type="text" size="small" @click="cardDisplayOpen = true">🎛 卡片</Button>
+        <Button type="text" size="small" @click="columnSettingsOpen = true">⚙️ 列设置</Button>
+        <Button type="primary" size="middle" @click="openTaskModal">新建任务</Button>
+      </div>
     </div>
     <div class="kanban-board">
       <div
-        v-for="col in taskColumns"
-        :key="col.key"
+        v-for="col in activeColumns"
+        :key="col.id"
         class="kanban-column"
         @dragover.prevent
-        @drop="handleDrop(col.key)"
+        @drop="handleDrop(col.id)"
       >
-        <div class="kanban-column-header" :class="col.color">
+        <div class="kanban-column-header" :class="`col-${col.color}`">
           <span class="kanban-column-dot"></span>
           <span>{{ col.label }}</span>
           <Button
-            v-if="col.key === 'today'"
+            v-if="col.isToday"
             type="text"
             size="small"
             @click="taskChartOpen = true"
           >📊 时段</Button>
-          <span class="kanban-column-count">{{ tasks.filter((t: TaskItem) => t.status === col.key).length }}</span>
+          <span class="kanban-column-count">{{ tasks.filter((t: TaskItem) => t.boardId === activeBoardId && t.status === col.id).length }}</span>
         </div>
         <div class="kanban-column-body">
           <div
-            v-for="task in tasks.filter((t: TaskItem) => t.status === col.key)"
+            v-for="task in tasks.filter((t: TaskItem) => t.boardId === activeBoardId && t.status === col.id)"
             :key="task.id"
             class="kanban-card"
             :class="{
@@ -346,18 +478,18 @@ onBeforeUnmount(disposeTaskChart);
             @click="openEditTask(task)"
           >
             <div class="kanban-card-title">{{ task.title }}</div>
-            <div class="kanban-card-deadline">
+            <div v-if="cardDisplay.deadline" class="kanban-card-deadline">
               <span class="kanban-card-tag" :class="{ 'is-longterm': !task.deadline }">
                 ⏰ {{ task.deadline || '长期' }}
               </span>
             </div>
             <div
-              v-if="task.description"
+              v-if="cardDisplay.description && task.description"
               class="kanban-card-desc"
               v-html="sanitizeHtml(task.description)"
             ></div>
             <div
-              v-if="task.linkType"
+              v-if="cardDisplay.link && task.linkType"
               class="kanban-card-link"
               @click.stop="openTaskLink(task)"
             >{{ findTaskLinkLabel(task.linkType, task.linkId) }}</div>
@@ -412,6 +544,10 @@ onBeforeUnmount(disposeTaskChart);
         <div class="form-field">
           <label class="form-field-label">关联</label>
           <CustomSelect v-model="taskForm.linkKey" :options="taskLinkOptions" />
+        </div>
+        <div v-if="taskModalMode === 'edit'" class="form-field">
+          <label class="form-field-label">所属看板</label>
+          <CustomSelect v-model="taskForm.boardId" :options="boardOptions" />
         </div>
       </div>
       <template #footer>
@@ -469,19 +605,159 @@ onBeforeUnmount(disposeTaskChart);
         </div>
       </template>
     </Modal>
+
+    <!-- 列设置 -->
+    <Modal
+      v-model:open="columnSettingsOpen"
+      title="列设置"
+      :typewriter="false"
+      :show-footer="true"
+      :width="640"
+    >
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div
+          v-for="(col, i) in activeColumns"
+          :key="col.id"
+          style="display:flex;align-items:center;gap:8px;"
+        >
+          <div style="width:130px;flex-shrink:0;">
+            <CustomSelect v-model="col.color" :options="KANBAN_COLOR_OPTIONS" />
+          </div>
+          <Input v-model="col.label" placeholder="列名称" style="flex:1;min-width:0;" />
+          <div style="width:120px;flex-shrink:0;">
+            <CustomSelect
+              :model-value="columnSemantic(col)"
+              :options="[
+                { key: 'none', label: '普通列' },
+                { key: 'today', label: '今日列' },
+                { key: 'done', label: '完成列' },
+              ]"
+              @update:model-value="setColumnSemantic(col, $event)"
+            />
+          </div>
+          <Button type="text" size="small" :disabled="i === 0" @click="moveColumn(i, -1)">↑</Button>
+          <Button type="text" size="small" :disabled="i === activeColumns.length - 1" @click="moveColumn(i, 1)">↓</Button>
+          <Button type="text" size="small" :disabled="activeColumns.length <= 1" @click="requestDeleteColumn(col)">删</Button>
+        </div>
+        <Button type="primary" size="middle" @click="addColumn">+ 添加列</Button>
+      </div>
+      <template #footer>
+        <div style="display:flex;justify-content:flex-end;gap:12px;">
+          <Button type="primary" size="middle" @click="columnSettingsOpen = false">完成</Button>
+        </div>
+      </template>
+    </Modal>
+
+    <!-- 删除列确认（非空列提示迁移） -->
+    <Modal
+      :open="!!columnDeleteTarget"
+      title="删除列"
+      :typewriter="false"
+      @ok="confirmDeleteColumn"
+      @close="columnDeleteTarget = null"
+    >
+      <template v-if="columnDeleteTarget">
+        <template v-if="columnDeleteTarget.taskCount > 0">
+          「{{ columnDeleteTarget.label }}」里还有 {{ columnDeleteTarget.taskCount }} 个任务，删除后它们会自动移动到剩余的第一列。确定删除吗？
+        </template>
+        <template v-else>
+          确定要删除列「{{ columnDeleteTarget.label }}」吗？
+        </template>
+      </template>
+    </Modal>
+
+    <!-- 看板管理 -->
+    <Modal
+      v-model:open="boardManagerOpen"
+      title="看板管理"
+      :typewriter="false"
+      :show-footer="true"
+      :width="560"
+    >
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div
+          v-for="board in boards"
+          :key="board.id"
+          style="display:flex;align-items:center;gap:8px;"
+        >
+          <Input v-model="board.name" placeholder="看板名称" style="flex:1;min-width:0;" />
+          <span v-if="board.id === activeBoardId" style="font-size:12px;color:var(--primary);font-weight:700;flex-shrink:0;">当前</span>
+          <Button
+            type="text"
+            size="small"
+            :disabled="boards.length <= 1"
+            @click="requestDeleteBoard(board.id)"
+          >删除</Button>
+        </div>
+        <Button type="primary" size="middle" @click="createBoard">+ 新建看板</Button>
+      </div>
+      <template #footer>
+        <div style="display:flex;justify-content:flex-end;gap:12px;">
+          <Button type="primary" size="middle" @click="boardManagerOpen = false">完成</Button>
+        </div>
+      </template>
+    </Modal>
+
+    <!-- 删除看板确认（级联删除任务） -->
+    <Modal
+      :open="!!boardDeleteTarget"
+      title="删除看板"
+      :typewriter="false"
+      @ok="confirmDeleteBoard"
+      @close="boardDeleteTarget = null"
+    >
+      <template v-if="boardDeleteTarget">
+        <template v-if="boardDeleteTarget.taskCount > 0">
+          看板「{{ boardDeleteTarget.name }}」里还有 {{ boardDeleteTarget.taskCount }} 个任务，删除后将一并移除（重要任务请先在编辑弹窗中转移到其他看板）。确定删除吗？
+        </template>
+        <template v-else>
+          确定要删除看板「{{ boardDeleteTarget.name }}」吗？
+        </template>
+      </template>
+    </Modal>
+
+    <!-- 卡片显示设置 -->
+    <Modal
+      v-model:open="cardDisplayOpen"
+      title="卡片显示"
+      :typewriter="false"
+      :show-footer="true"
+      :width="420"
+    >
+      <div style="display:flex;flex-direction:column;gap:14px;">
+        <label class="card-display-option">
+          <input type="checkbox" v-model="cardDisplay.description" />
+          <span>显示任务描述</span>
+        </label>
+        <label class="card-display-option">
+          <input type="checkbox" v-model="cardDisplay.deadline" />
+          <span>显示截止时间标签</span>
+        </label>
+        <label class="card-display-option">
+          <input type="checkbox" v-model="cardDisplay.link" />
+          <span>显示关联链接</span>
+        </label>
+      </div>
+      <template #footer>
+        <div style="display:flex;justify-content:flex-end;gap:12px;">
+          <Button type="primary" size="middle" @click="cardDisplayOpen = false">完成</Button>
+        </div>
+      </template>
+    </Modal>
   </div>
 </template>
 
 <style scoped>
 .kanban-board {
   display: grid;
+  /* 横屏一行最多 4 列，超出换行 */
   grid-template-columns: repeat(4, 1fr);
   gap: 20px;
   /* 看板整体固定高度（视口减去页头/页签/区块头），滚动发生在各列内部 */
   height: calc(100vh - 320px);
   min-height: 420px;
 }
-/* 竖屏/窄屏：改为两列排列，每列固定较矮高度，列内滚动 */
+/* 竖屏/窄屏：两列排列，每列固定较矮高度，列内滚动 */
 @media (max-width: 900px), (orientation: portrait) {
   .kanban-board {
     grid-template-columns: repeat(2, 1fr);
@@ -516,9 +792,14 @@ onBeforeUnmount(disposeTaskChart);
   color: #725d42;
   margin-bottom: 14px;
 }
-.kanban-column-header.app-yellow { background: #fff8e0; }
-.kanban-column-header.app-blue { background: #e8edff; }
-.kanban-column-header.app-green { background: #e8f5e8; }
+.kanban-column-header.col-red { background: #ffe9e4; }
+.kanban-column-header.col-yellow { background: #fff8e0; }
+.kanban-column-header.col-blue { background: #e8edff; }
+.kanban-column-header.col-green { background: #e8f5e8; }
+.kanban-column-header.col-pink { background: #ffe9f3; }
+.kanban-column-header.col-teal { background: #e0f6f3; }
+.kanban-column-header.col-purple { background: #f1e9ff; }
+.kanban-column-header.col-orange { background: #fff0dd; }
 .kanban-column-dot {
   width: 10px;
   height: 10px;
@@ -637,6 +918,22 @@ onBeforeUnmount(disposeTaskChart);
 .kanban-card-actions {
   display: flex;
   justify-content: flex-end;
+}
+
+.card-display-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  cursor: pointer;
+}
+.card-display-option input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+  cursor: pointer;
 }
 
 .task-chart-body {

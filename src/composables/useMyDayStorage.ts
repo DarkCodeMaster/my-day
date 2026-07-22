@@ -1,9 +1,10 @@
 import { ref, reactive, watch, onMounted } from 'vue';
-import type { MyDayState, WeightRecord, StudyItem, MoneyItem, TodayLog, TaskItem, InspirationItem } from '@/types';
+import type { MyDayState, WeightRecord, StudyItem, MoneyItem, TodayLog, TaskItem, InspirationItem, KanbanBoard, KanbanColumn, CardDisplayConfig } from '@/types';
 import { todayStr } from '@/utils/date';
+import { createDefaultColumns } from '@/utils/task';
 
 const STORAGE_KEY = 'myday';
-const CURRENT_VERSION = 3;
+const CURRENT_VERSION = 4;
 
 const SAMPLE_LOG_CONTENTS = new Set([
   '晨间体重 67.0 kg，比昨天 -0.3 kg 🎉',
@@ -12,6 +13,39 @@ const SAMPLE_LOG_CONTENTS = new Set([
   '阅读《原子习惯》第 4 章，进度 45%',
   '晚餐记录：沙拉 + 鸡胸肉',
 ]);
+
+/** 默认看板：id 与 v3 旧任务的 status 值一致，旧数据零改写 */
+export const createDefaultBoard = (): KanbanBoard => ({
+  id: 'default',
+  name: '默认看板',
+  columns: createDefaultColumns(''),
+});
+
+/** 修正看板结构：补默认值，保证每板恰好一个 isToday、至多一个 isDone */
+function sanitizeBoard(raw: any, index: number): KanbanBoard {
+  const columns: KanbanColumn[] = (Array.isArray(raw?.columns) ? raw.columns : []).map((c: any, i: number) => ({
+    id: String(c?.id ?? `col-${i}`),
+    label: String(c?.label ?? `列 ${i + 1}`),
+    color: c?.color ?? 'blue',
+    isToday: !!c?.isToday,
+    isDone: !!c?.isDone,
+  }));
+  if (columns.length === 0) {
+    return createDefaultBoard();
+  }
+  // 恰好一个 isToday：没有则标第一列，多个则保留第一个
+  const todayIdx = columns.findIndex((c) => c.isToday);
+  if (todayIdx === -1) columns[0].isToday = true;
+  else columns.forEach((c, i) => { c.isToday = i === todayIdx; });
+  // 至多一个 isDone
+  const doneIdx = columns.findIndex((c) => c.isDone);
+  columns.forEach((c, i) => { c.isDone = i === doneIdx; });
+  return {
+    id: String(raw?.id ?? `board-${index}`),
+    name: String(raw?.name ?? '未命名看板'),
+    columns,
+  };
+}
 
 export function migrateMyDayState(data: any): MyDayState {
   const today = todayStr();
@@ -51,6 +85,31 @@ export function migrateMyDayState(data: any): MyDayState {
       return log.date === today;
     });
 
+  // v4：看板结构（旧数据补默认看板）
+  const boards: KanbanBoard[] = Array.isArray(data.boards) && data.boards.length
+    ? data.boards.map(sanitizeBoard)
+    : [createDefaultBoard()];
+
+  const boardIds = new Set(boards.map((b) => b.id));
+  const activeBoardId = typeof data.activeBoardId === 'string' && boardIds.has(data.activeBoardId)
+    ? data.activeBoardId
+    : boards[0].id;
+
+  const cardDisplay: CardDisplayConfig = {
+    description: data.cardDisplay?.description ?? true,
+    deadline: data.cardDisplay?.deadline ?? true,
+    link: data.cardDisplay?.link ?? true,
+  };
+
+  // v4：任务补 boardId，防御性修正非法 status/boardId
+  const tasks: TaskItem[] = (Array.isArray(data.tasks) ? data.tasks : []).map((t: any) => {
+    const boardId = typeof t?.boardId === 'string' && boardIds.has(t.boardId) ? t.boardId : boards[0].id;
+    const board = boards.find((b) => b.id === boardId)!;
+    const colIds = new Set(board.columns.map((c) => c.id));
+    const status = typeof t?.status === 'string' && colIds.has(t.status) ? t.status : board.columns[0].id;
+    return { ...t, boardId, status };
+  });
+
   return {
     version: CURRENT_VERSION,
     activeTab: data.activeTab || 'health',
@@ -61,10 +120,13 @@ export function migrateMyDayState(data: any): MyDayState {
     studyItems: Array.isArray(data.studyItems) ? data.studyItems : [],
     moneyItems,
     todayLogs,
-    tasks: Array.isArray(data.tasks) ? data.tasks : [],
+    tasks,
     inspirations: Array.isArray(data.inspirations)
       ? data.inspirations
       : migratedInspirations,
+    boards,
+    activeBoardId,
+    cardDisplay,
   };
 }
 
@@ -82,6 +144,9 @@ const todayLogs = reactive<TodayLog[]>([]);
 const tasks = reactive<TaskItem[]>([]);
 const inspirations = reactive<InspirationItem[]>([]);
 const moneyPlan = ref('');
+const boards = reactive<KanbanBoard[]>([]);
+const activeBoardId = ref('default');
+const cardDisplay = reactive<CardDisplayConfig>({ description: true, deadline: true, link: true });
 const isLoaded = ref(false);
 
 const saveState = () => {
@@ -98,6 +163,9 @@ const saveState = () => {
       todayLogs: [...todayLogs],
       tasks: [...tasks],
       inspirations: [...inspirations],
+      boards: [...boards],
+      activeBoardId: activeBoardId.value,
+      cardDisplay: { ...cardDisplay },
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (e) {
@@ -106,13 +174,15 @@ const saveState = () => {
 };
 
 // 自动保存：模块加载时注册一次，与应用同寿命
-watch([activeTab, chartRange, weightUnit], saveState);
+watch([activeTab, chartRange, weightUnit, activeBoardId], saveState);
 watch(weights, saveState, { deep: true });
 watch(studyItems, saveState, { deep: true });
 watch(moneyItems, saveState, { deep: true });
 watch(todayLogs, saveState, { deep: true });
 watch(tasks, saveState, { deep: true });
 watch(inspirations, saveState, { deep: true });
+watch(boards, saveState, { deep: true });
+watch(cardDisplay, saveState, { deep: true });
 watch(moneyPlan, saveState);
 
 let loadAttempted = false;
@@ -139,6 +209,11 @@ function ensureLoaded() {
       todayLogs.splice(0, todayLogs.length, ...saved.todayLogs);
       tasks.splice(0, tasks.length, ...saved.tasks);
       inspirations.splice(0, inspirations.length, ...saved.inspirations);
+      boards.splice(0, boards.length, ...saved.boards);
+      activeBoardId.value = saved.activeBoardId;
+      cardDisplay.description = saved.cardDisplay.description;
+      cardDisplay.deadline = saved.cardDisplay.deadline;
+      cardDisplay.link = saved.cardDisplay.link;
     }
   } catch (e) {
     console.warn('Failed to load MyDay data:', e);
@@ -162,6 +237,9 @@ export function useMyDayStorage() {
     todayLogs,
     tasks,
     inspirations,
+    boards,
+    activeBoardId,
+    cardDisplay,
     isLoaded,
     saveState,
   };

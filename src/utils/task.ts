@@ -1,4 +1,24 @@
-import type { TaskItem } from '@/types';
+import type { KanbanColorKey, TaskItem } from '@/types';
+
+/** 看板列预设色板 */
+export const KANBAN_COLOR_OPTIONS: { key: KanbanColorKey; label: string }[] = [
+  { key: 'red', label: '🔴 红色' },
+  { key: 'yellow', label: '🟡 黄色' },
+  { key: 'blue', label: '🔵 蓝色' },
+  { key: 'green', label: '🟢 绿色' },
+  { key: 'pink', label: '🌸 粉色' },
+  { key: 'teal', label: '🩵 青色' },
+  { key: 'purple', label: '🟣 紫色' },
+  { key: 'orange', label: '🟠 橙色' },
+];
+
+/** 新建看板时的默认列模板（id 需调用方替换时间戳保证唯一） */
+export const createDefaultColumns = (suffix: string) => [
+  { id: `today${suffix}`, label: '今日任务', color: 'red' as KanbanColorKey, isToday: true },
+  { id: `todo${suffix}`, label: '待开始', color: 'yellow' as KanbanColorKey },
+  { id: `doing${suffix}`, label: '进行中', color: 'blue' as KanbanColorKey },
+  { id: `done${suffix}`, label: '已完成', color: 'green' as KanbanColorKey, isDone: true },
+];
 
 export const taskTimeSlotOptions = [
   { key: 'dawn', label: '凌晨（00:00-06:00）' },

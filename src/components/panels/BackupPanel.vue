@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { Button, Card, Title, Modal, Notification } from 'animal-island-vue';
-import { useMyDayStorage, migrateMyDayState } from '@/composables/useMyDayStorage';
+import { useMyDayStorage, migrateMyDayState, createDefaultBoard } from '@/composables/useMyDayStorage';
 import { todayStr } from '@/utils/date';
 
 const {
@@ -15,6 +15,9 @@ const {
   todayLogs,
   tasks,
   inspirations,
+  boards,
+  activeBoardId,
+  cardDisplay,
   saveState,
 } = useMyDayStorage();
 
@@ -90,7 +93,7 @@ const validateImportData = (data: any): { valid: false; error: string } | { vali
     return { valid: false, error: 'version 不能小于 1' };
   }
 
-  const arrayFields = ['weights', 'studyItems', 'moneyItems', 'todayLogs', 'tasks', 'inspirations'];
+  const arrayFields = ['weights', 'studyItems', 'moneyItems', 'todayLogs', 'tasks', 'inspirations', 'boards'];
   for (const key of arrayFields) {
     if (data[key] != null && !Array.isArray(data[key])) {
       return { valid: false, error: `${key} 必须是数组` };
@@ -108,6 +111,12 @@ const validateImportData = (data: any): { valid: false; error: string } | { vali
   }
   if (data.weightUnit != null && data.weightUnit !== 'kg' && data.weightUnit !== 'jin') {
     return { valid: false, error: 'weightUnit 必须是 kg 或 jin' };
+  }
+  if (data.activeBoardId != null && typeof data.activeBoardId !== 'string') {
+    return { valid: false, error: 'activeBoardId 必须是字符串' };
+  }
+  if (data.cardDisplay != null && typeof data.cardDisplay !== 'object') {
+    return { valid: false, error: 'cardDisplay 必须是对象' };
   }
 
   return { valid: true, data };
@@ -153,6 +162,11 @@ const executeImport = () => {
     todayLogs.splice(0, todayLogs.length, ...migrated.todayLogs);
     tasks.splice(0, tasks.length, ...migrated.tasks);
     inspirations.splice(0, inspirations.length, ...migrated.inspirations);
+    boards.splice(0, boards.length, ...migrated.boards);
+    activeBoardId.value = migrated.activeBoardId;
+    cardDisplay.description = migrated.cardDisplay.description;
+    cardDisplay.deadline = migrated.cardDisplay.deadline;
+    cardDisplay.link = migrated.cardDisplay.link;
 
     importJson.value = '';
     importConfirmModalOpen.value = false;
@@ -170,6 +184,12 @@ const executeClearAll = () => {
   tasks.splice(0, tasks.length);
   inspirations.splice(0, inspirations.length);
   moneyPlan.value = '';
+  // 清空后重建默认看板（TasksPanel 渲染需要至少一个看板）
+  boards.splice(0, boards.length, createDefaultBoard());
+  activeBoardId.value = 'default';
+  cardDisplay.description = true;
+  cardDisplay.deadline = true;
+  cardDisplay.link = true;
   clearAllModalOpen.value = false;
   saveState();
   Notification.success('已清空所有数据');

@@ -48,12 +48,39 @@ export interface TaskItem {
   id: number;
   title: string;
   description?: string;
-  status: 'today' | 'todo' | 'doing' | 'done';
+  status: string;
+  boardId: string;
   deadline?: string;
   timeSlot?: 'dawn' | 'morning' | 'afternoon' | 'evening';
   completedAt?: string;
   linkType?: 'study' | 'money' | null;
   linkId?: number;
+}
+
+export type KanbanColorKey =
+  | 'red' | 'yellow' | 'blue' | 'green'
+  | 'pink' | 'teal' | 'purple' | 'orange';
+
+export interface KanbanColumn {
+  id: string;
+  label: string;
+  color: KanbanColorKey;
+  /** 今日列语义标记：时段图统计、赚钱自动同步、新建任务分配的目标列（每看板恰好一个） */
+  isToday?: boolean;
+  /** 完成列语义标记：拖入记录 completedAt，拖出清除（至多一个，可无） */
+  isDone?: boolean;
+}
+
+export interface KanbanBoard {
+  id: string;
+  name: string;
+  columns: KanbanColumn[];
+}
+
+export interface CardDisplayConfig {
+  description: boolean;
+  deadline: boolean;
+  link: boolean;
 }
 
 export interface MyDayState {
@@ -68,4 +95,7 @@ export interface MyDayState {
   todayLogs: TodayLog[];
   tasks: TaskItem[];
   inspirations: InspirationItem[];
+  boards: KanbanBoard[];
+  activeBoardId: string;
+  cardDisplay: CardDisplayConfig;
 }
