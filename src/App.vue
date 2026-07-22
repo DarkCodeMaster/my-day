@@ -132,6 +132,21 @@ const tabItems = [
 </template>
 
 <style scoped>
+/* 组件库 .animal-tabs 默认 overflow: hidden（裁圆角），会导致内部 sticky 失效，覆写为 visible（提高优先级压过组件库 scoped 样式） */
+.tabs-wrapper :deep(.animal-tabs) {
+  overflow: visible;
+}
+/* Tabs 导航栏滚动时吸附到屏幕上方 */
+:deep(.animal-tabs__list) {
+  position: sticky;
+  top: 8px;
+  z-index: 89;
+  background: rgba(255, 253, 245, 0.92);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(114, 93, 66, 0.08);
+}
+
 .tabs-wrapper {
   flex: 1 1 auto;
   min-height: 0;

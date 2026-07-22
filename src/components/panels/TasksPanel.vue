@@ -477,11 +477,14 @@ onBeforeUnmount(disposeTaskChart);
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 20px;
+  /* 看板整体固定高度（视口减去页头/页签/区块头），滚动发生在各列内部 */
+  height: calc(100vh - 320px);
+  min-height: 420px;
 }
 .kanban-column {
   display: flex;
   flex-direction: column;
-  min-height: 420px;
+  min-height: 0;
   background: rgba(247, 243, 223, 0.6);
   border: 2px dashed #e8dcc8;
   border-radius: 22px;
@@ -528,6 +531,16 @@ onBeforeUnmount(disposeTaskChart);
   flex-direction: column;
   gap: 12px;
   flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.kanban-column-body::-webkit-scrollbar {
+  width: 6px;
+}
+.kanban-column-body::-webkit-scrollbar-thumb {
+  background: #d9cbaa;
+  border-radius: 3px;
 }
 .kanban-card {
   background: #fffdf5;
@@ -535,6 +548,7 @@ onBeforeUnmount(disposeTaskChart);
   border-radius: 16px;
   padding: 12px;
   cursor: grab;
+  flex-shrink: 0;
   box-shadow: 0 2px 0 rgba(114, 93, 66, 0.06);
   transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
 }
