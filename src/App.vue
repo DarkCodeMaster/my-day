@@ -17,6 +17,7 @@ import {
 import { useMyDayStorage } from '@/composables/useMyDayStorage';
 import { useAchievements } from '@/composables/useAchievements';
 import { useQuickInspiration } from '@/composables/useQuickInspiration';
+import { useTaskMoneySync } from '@/composables/useTaskMoneySync';
 import DetailDrawers from '@/components/DetailDrawers.vue';
 import DeleteConfirmModal from '@/components/DeleteConfirmModal.vue';
 import InspirationComposer from '@/components/InspirationComposer.vue';
@@ -33,6 +34,8 @@ import BackupPanel from '@/components/panels/BackupPanel.vue';
 const { activeTab, isLoaded } = useMyDayStorage();
 // 成就引擎全局常驻（与激活 Tab 无关）：数据变化实时检测解锁
 useAchievements();
+// 赚钱任务 → 看板任务的全量同步（响应式 watch）
+useTaskMoneySync();
 // 桌面浮动窗速记的灵感接收监听（浏览器环境无 electronAPI，自动跳过）
 useQuickInspiration();
 

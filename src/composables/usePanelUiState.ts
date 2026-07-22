@@ -18,10 +18,13 @@ const showCompletedStudy = ref(false);
 const studyPage = ref(1);
 
 // 赚钱
-const moneyView = ref<'tasks' | 'calendar' | 'plan'>('tasks');
+const moneyView = ref<'tasks' | 'plan'>('tasks');
 const moneyPage = ref(1);
-const moneyCalendarMonth = ref(new Date());
 const moneyPlanDraft = ref('');
+
+// 任务（看板/日历视图切换 + 日历月份）
+const taskView = ref<'board' | 'calendar'>('board');
+const taskCalendarMonth = ref(new Date());
 
 export function usePanelUiState() {
   return {
@@ -36,7 +39,9 @@ export function usePanelUiState() {
     // money
     moneyView,
     moneyPage,
-    moneyCalendarMonth,
     moneyPlanDraft,
+    // tasks
+    taskView,
+    taskCalendarMonth,
   };
 }

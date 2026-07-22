@@ -6,9 +6,8 @@ import { useMyDayStorage } from '@/composables/useMyDayStorage';
 import { useTodayLog } from '@/composables/useTodayLog';
 import { useDetailDrawers } from '@/composables/useDetailDrawers';
 import { useDeleteConfirm } from '@/composables/useDeleteConfirm';
-import { useTaskMoneySync } from '@/composables/useTaskMoneySync';
 import { usePanelUiState } from '@/composables/usePanelUiState';
-import { todayStr, formatDateStr } from '@/utils/date';
+import { todayStr } from '@/utils/date';
 import { statusText } from '@/utils/labels';
 import type { MoneyItem } from '@/types';
 import type { CustomSelectOption } from '@/components/CustomSelect.vue';
@@ -19,8 +18,7 @@ const { moneyItems, moneyPlan } = useMyDayStorage();
 const { pushTodayLog } = useTodayLog();
 const { openMoneyDetail } = useDetailDrawers();
 const { openDelete } = useDeleteConfirm();
-const { autoCreateTodayTaskFromMoney, syncAutoTodayTaskForMoney } = useTaskMoneySync();
-const { moneyView, moneyPage, moneyCalendarMonth, moneyPlanDraft } = usePanelUiState();
+const { moneyView, moneyPage, moneyPlanDraft } = usePanelUiState();
 
 const moneyCols: any[] = [
   { title: '业务描述', dataIndex: 'desc' },
@@ -73,7 +71,7 @@ const submitMoney = () => {
     description: moneyForm.description,
   };
   moneyItems.push(item);
-  autoCreateTodayTaskFromMoney(item);
+  // 看板同步由 useTaskMoneySync 的响应式 watch 统一处理
   resetMoneyForm();
   moneyModalOpen.value = false;
   pushTodayLog('money', `添加赚钱任务 ${item.desc} ¥${item.amount}，${statusText(item.status)}`);
@@ -111,7 +109,7 @@ const submitEditMoney = () => {
   record.progress = Math.min(100, Math.max(0, Number(editMoneyForm.progress) || 0));
   record.description = editMoneyForm.description;
   if (record.status === 'done') record.progress = 100;
-  syncAutoTodayTaskForMoney(record);
+  // 看板同步由 useTaskMoneySync 的响应式 watch 统一处理
   pushTodayLog('money', `更新赚钱任务 ${record.desc}，${statusText(record.status)}，进度 ${record.progress}%`);
   editMoneyModalOpen.value = false;
 };
@@ -129,45 +127,6 @@ const paginatedMoneyItems = computed(() => {
 });
 watch(moneyView, () => { moneyPage.value = 1; });
 watch(moneyTotalPages, (total) => { if (moneyPage.value > total) moneyPage.value = total || 1; });
-
-/* ---------- 日历视图 ---------- */
-const moneyMonthLabel = computed(() =>
-  `${moneyCalendarMonth.value.getFullYear()}年${moneyCalendarMonth.value.getMonth() + 1}月`
-);
-const moneyCalendarDays = computed(() => {
-  const year = moneyCalendarMonth.value.getFullYear();
-  const month = moneyCalendarMonth.value.getMonth();
-  const first = new Date(year, month, 1);
-  const start = new Date(first);
-  start.setDate(start.getDate() - first.getDay());
-  const days = [];
-  for (let i = 0; i < 42; i++) {
-    const d = new Date(start);
-    d.setDate(start.getDate() + i);
-    const ds = formatDateStr(d);
-    days.push({
-      date: ds,
-      day: d.getDate(),
-      inMonth: d.getMonth() === month,
-      tasks: moneyItems.filter((m: MoneyItem) => m.deadline === ds),
-    });
-  }
-  return days;
-});
-const prevMoneyMonth = () => {
-  moneyCalendarMonth.value = new Date(
-    moneyCalendarMonth.value.getFullYear(),
-    moneyCalendarMonth.value.getMonth() - 1,
-    1
-  );
-};
-const nextMoneyMonth = () => {
-  moneyCalendarMonth.value = new Date(
-    moneyCalendarMonth.value.getFullYear(),
-    moneyCalendarMonth.value.getMonth() + 1,
-    1
-  );
-};
 
 /* ---------- 长期规划 ---------- */
 watch(moneyView, (view) => {
@@ -218,12 +177,6 @@ const pendingIncome = computed(() =>
             @click="moneyView = 'tasks'"
           >赚钱任务表</Title>
           <Title
-            color="app-teal"
-            size="middle"
-            :style="{ opacity: moneyView === 'calendar' ? 1 : 0.5, cursor: 'pointer' }"
-            @click="moneyView = 'calendar'"
-          >日历视图</Title>
-          <Title
             color="app-pink"
             size="middle"
             :style="{ opacity: moneyView === 'plan' ? 1 : 0.5, cursor: 'pointer' }"
@@ -268,38 +221,6 @@ const pendingIncome = computed(() =>
         <Button type="default" size="small" :disabled="moneyPage === 1" @click="moneyPage--">上一页</Button>
         <span class="table-pagination-info">{{ moneyPage }} / {{ moneyTotalPages }}</span>
         <Button type="default" size="small" :disabled="moneyPage === moneyTotalPages" @click="moneyPage++">下一页</Button>
-      </div>
-      <div v-if="moneyView === 'calendar'">
-        <Card pattern="default" style="width:100%;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-            <Button type="default" size="middle" style="font-size:30px" @click="prevMoneyMonth">‹</Button>
-            <span style="font-weight:800;color:var(--text);">{{ moneyMonthLabel }}</span>
-            <Button type="default" size="middle" style="font-size:30px" @click="nextMoneyMonth">›</Button>
-          </div>
-          <div class="calendar-grid">
-            <div v-for="d in ['日','一','二','三','四','五','六']" :key="d" class="calendar-day-name">{{ d }}</div>
-            <div
-              v-for="(day, i) in moneyCalendarDays"
-              :key="i"
-              class="calendar-cell money-calendar-cell"
-              :class="{ 'text-disabled': !day.inMonth, 'is-today': day.date === todayStr() }"
-            >
-              <div class="money-calendar-day">{{ day.day }}</div>
-              <div v-if="day.tasks.length" class="money-calendar-tasks">
-                <div
-                  v-for="task in day.tasks"
-                  :key="task.id"
-                  class="money-calendar-task"
-                  :class="`status-${task.status}`"
-                  @click="openMoneyDetail(task)"
-                >
-                  <span class="money-calendar-task-desc">{{ task.desc }}</span>
-                  <span class="money-calendar-task-amount">¥{{ task.amount }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </Card>
       </div>
       <div v-if="moneyView === 'plan'" class="form-field money-plan-editor">
         <QuillEditor
@@ -441,93 +362,3 @@ const pendingIncome = computed(() =>
   </div>
 </template>
 
-<style scoped>
-.money-calendar-cell {
-  aspect-ratio: auto;
-  height: auto;
-  min-height: 104px;
-  align-items: flex-start;
-  justify-content: flex-start;
-  padding: 10px;
-  gap: 6px;
-  overflow: hidden;
-  background: #fffdf5;
-  border: 2px solid #e8dcc8;
-  border-radius: 18px;
-  box-shadow: 0 2px 0 rgba(114, 93, 66, 0.06);
-  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
-}
-.money-calendar-cell:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 6px 14px rgba(114, 93, 66, 0.12);
-  border-color: var(--primary);
-}
-.money-calendar-cell.text-disabled {
-  opacity: 0.45;
-  background: #f7f4e8;
-}
-.money-calendar-cell.is-today .money-calendar-day {
-  background: var(--primary-bg);
-  color: var(--primary);
-  box-shadow: inset 0 0 0 2px var(--primary);
-}
-.money-calendar-day {
-  align-self: flex-start;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  font-weight: 800;
-  font-size: 14px;
-  color: var(--text-secondary);
-  margin-bottom: 2px;
-  transition: all 0.2s;
-}
-.money-calendar-tasks {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-.money-calendar-task {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  padding: 4px 8px;
-  border-radius: 12px;
-  font-size: 11px;
-  cursor: pointer;
-  transition: transform 0.15s, box-shadow 0.15s;
-  box-shadow: 0 1px 0 rgba(114, 93, 66, 0.08);
-}
-.money-calendar-task:hover {
-  transform: scale(1.02);
-  box-shadow: 0 3px 8px rgba(114, 93, 66, 0.15);
-}
-.money-calendar-task.status-pending {
-  background: #fff8e0;
-  color: #7a6528;
-}
-.money-calendar-task.status-done {
-  background: #e8f5e8;
-  color: #3a6b3a;
-}
-.money-calendar-task.status-paused {
-  background: #fff0e8;
-  color: #8a4a2a;
-}
-.money-calendar-task-desc {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 700;
-}
-.money-calendar-task-amount {
-  font-weight: 800;
-  flex-shrink: 0;
-  opacity: 0.85;
-}
-</style>

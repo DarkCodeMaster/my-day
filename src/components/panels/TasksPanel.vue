@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch, nextTick, onBeforeUnmount } from 'vue';
-import { Button, Input, Title, Modal, Notification } from 'animal-island-vue';
+import { Button, Input, Title, Modal, Card, Notification } from 'animal-island-vue';
 import { QuillEditor } from '@vueup/vue-quill';
 import { init } from '@/lib/echarts';
 import { useMyDayStorage } from '@/composables/useMyDayStorage';
+import { usePanelUiState } from '@/composables/usePanelUiState';
 import { useDetailDrawers } from '@/composables/useDetailDrawers';
 import { sanitizeHtml } from '@/utils/sanitize';
+import { todayStr, formatDateStr } from '@/utils/date';
 import {
   taskTimeSlotOptions,
   getCurrentTimeSlot,
@@ -22,6 +24,7 @@ import CustomSelect from '@/components/CustomSelect.vue';
 import DatePickerModal from '@/components/DatePickerModal.vue';
 
 const { tasks, studyItems, moneyItems, boards, activeBoardId, cardDisplay, archivedTasks } = useMyDayStorage();
+const { taskView, taskCalendarMonth } = usePanelUiState();
 const { openDetail, openMoneyDetail } = useDetailDrawers();
 
 /* ---------- 当前看板与列 ---------- */
@@ -350,6 +353,50 @@ const confirmArchive = () => {
   archiveConfirmOpen.value = false;
 };
 
+/* ---------- 日历视图 ---------- */
+const taskMonthLabel = computed(() =>
+  `${taskCalendarMonth.value.getFullYear()}年${taskCalendarMonth.value.getMonth() + 1}月`
+);
+/** 42 格月历：展示全部看板中任务的截止日期（跨看板汇总） */
+const taskCalendarDays = computed(() => {
+  const year = taskCalendarMonth.value.getFullYear();
+  const month = taskCalendarMonth.value.getMonth();
+  const first = new Date(year, month, 1);
+  const start = new Date(first);
+  start.setDate(start.getDate() - first.getDay());
+  const days = [];
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    const ds = formatDateStr(d);
+    days.push({
+      date: ds,
+      day: d.getDate(),
+      inMonth: d.getMonth() === month,
+      tasks: tasks.filter((t: TaskItem) => t.deadline === ds),
+    });
+  }
+  return days;
+});
+const prevTaskMonth = () => {
+  taskCalendarMonth.value = new Date(
+    taskCalendarMonth.value.getFullYear(),
+    taskCalendarMonth.value.getMonth() - 1,
+    1
+  );
+};
+const nextTaskMonth = () => {
+  taskCalendarMonth.value = new Date(
+    taskCalendarMonth.value.getFullYear(),
+    taskCalendarMonth.value.getMonth() + 1,
+    1
+  );
+};
+
+/** 任务是否在其所属看板的完成列（日历里划线/变绿用，跨看板判定） */
+const isTaskInDoneColumn = (task: TaskItem) =>
+  !!boards.find((b) => b.id === task.boardId)?.columns.find((c) => c.id === task.status)?.isDone;
+
 /* ---------- 时段分布图 ---------- */
 const taskPeriods = [
   { key: 'dawn', label: '凌晨', start: 0, end: 6, color: '#889df0' },
@@ -465,22 +512,38 @@ onBeforeUnmount(disposeTaskChart);
 <template>
   <div class="section">
     <div class="section-head" style="flex-direction:column;align-items:stretch;">
-      <Title color="app-yellow" size="middle">任务看板</Title>
+      <div style="display:flex;gap:32px;align-items:center;">
+        <Title
+          color="app-yellow"
+          size="middle"
+          :style="{ opacity: taskView === 'board' ? 1 : 0.5, cursor: 'pointer' }"
+          @click="taskView = 'board'"
+        >任务看板</Title>
+        <Title
+          color="app-teal"
+          size="middle"
+          :style="{ opacity: taskView === 'calendar' ? 1 : 0.5, cursor: 'pointer' }"
+          @click="taskView = 'calendar'"
+        >日历视图</Title>
+      </div>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
-        <div style="display:flex;align-items:center;gap:10px;">
+        <div v-if="taskView === 'board'" style="display:flex;align-items:center;gap:10px;">
           <div style="width:200px;">
             <CustomSelect v-model="activeBoardId" :options="boardOptions" />
           </div>
           <Button type="text" size="small" @click="boardManagerOpen = true">📋 管理</Button>
         </div>
+        <div v-else></div>
         <div style="display:flex;align-items:center;gap:10px;">
-          <Button type="text" size="small" @click="cardDisplayOpen = true">🎛 卡片</Button>
-          <Button type="text" size="small" @click="columnSettingsOpen = true">⚙️ 列设置</Button>
+          <template v-if="taskView === 'board'">
+            <Button type="text" size="small" @click="cardDisplayOpen = true">🎛 卡片</Button>
+            <Button type="text" size="small" @click="columnSettingsOpen = true">⚙️ 列设置</Button>
+          </template>
           <Button type="primary" size="middle" @click="openTaskModal">新建任务</Button>
         </div>
       </div>
     </div>
-    <div class="kanban-board">
+    <div v-if="taskView === 'board'" class="kanban-board">
       <div
         v-for="col in activeColumns"
         :key="col.id"
@@ -546,6 +609,37 @@ onBeforeUnmount(disposeTaskChart);
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- 日历视图：全部看板任务按截止日期汇总 -->
+    <div v-if="taskView === 'calendar'">
+      <Card pattern="default" style="width:100%;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+          <Button type="default" size="middle" style="font-size:30px" @click="prevTaskMonth">‹</Button>
+          <span style="font-weight:800;color:var(--text);">{{ taskMonthLabel }}</span>
+          <Button type="default" size="middle" style="font-size:30px" @click="nextTaskMonth">›</Button>
+        </div>
+        <div class="calendar-grid">
+          <div v-for="d in ['日','一','二','三','四','五','六']" :key="d" class="calendar-day-name">{{ d }}</div>
+          <div
+            v-for="(day, i) in taskCalendarDays"
+            :key="i"
+            class="calendar-cell task-calendar-cell"
+            :class="{ 'text-disabled': !day.inMonth, 'is-today': day.date === todayStr() }"
+          >
+            <div class="task-calendar-day">{{ day.day }}</div>
+            <div v-if="day.tasks.length" class="task-calendar-tasks">
+              <div
+                v-for="task in day.tasks"
+                :key="task.id"
+                class="task-calendar-task"
+                :class="{ 'is-done': isTaskInDoneColumn(task) }"
+                @click="openEditTask(task)"
+              >{{ task.title }}</div>
+            </div>
+          </div>
+        </div>
+      </Card>
     </div>
 
     <Modal
@@ -806,6 +900,80 @@ onBeforeUnmount(disposeTaskChart);
 </template>
 
 <style scoped>
+/* ---------- 日历视图（原赚钱日历样式改造） ---------- */
+.task-calendar-cell {
+  aspect-ratio: auto;
+  height: auto;
+  min-height: 104px;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 10px;
+  gap: 6px;
+  overflow: hidden;
+  background: #fffdf5;
+  border: 2px solid #e8dcc8;
+  border-radius: 18px;
+  box-shadow: 0 2px 0 rgba(114, 93, 66, 0.06);
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+}
+.task-calendar-cell:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 14px rgba(114, 93, 66, 0.12);
+  border-color: var(--primary);
+}
+.task-calendar-cell.text-disabled {
+  opacity: 0.45;
+  background: #f7f4e8;
+}
+.task-calendar-cell.is-today .task-calendar-day {
+  background: var(--primary-bg);
+  color: var(--primary);
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+.task-calendar-day {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-weight: 800;
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 2px;
+  transition: all 0.2s;
+}
+.task-calendar-tasks {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.task-calendar-task {
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  background: #fff8e0;
+  color: #7a6528;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-shadow: 0 1px 0 rgba(114, 93, 66, 0.08);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.task-calendar-task:hover {
+  transform: scale(1.02);
+  box-shadow: 0 3px 8px rgba(114, 93, 66, 0.15);
+}
+.task-calendar-task.is-done {
+  background: #e8f5e8;
+  color: #3a6b3a;
+  text-decoration: line-through;
+}
+
 .kanban-board {
   display: grid;
   /* 横屏一行最多 4 列，超出换行 */
