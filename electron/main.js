@@ -22,6 +22,14 @@ function createWindow() {
     minWidth: 900,
     minHeight: 600,
     autoHideMenuBar: true,
+    // 自定义标题栏（方案 A）：隐藏原生标题栏，只保留配色定制的窗口控制按钮，
+    // 保留 Win11 贴靠布局/Aero Shake/双击最大化等全部原生能力
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
+    titleBarOverlay: {
+      color: '#dff6f3', // 与页面天空蓝渐变顶部一致，视觉无缝
+      symbolColor: '#5c4b37', // 深棕符号色，贴合动森主题
+      height: 40,
+    },
     // Windows 任务栏/标题栏用 ICO（PNG 在部分系统上任务栏会显示空白）；mac/Linux 用 PNG
     icon: path.join(__dirname, process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
     webPreferences: {
@@ -139,7 +147,7 @@ function createFloatingWindow() {
   floatingWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   floatingWindow.loadFile(path.join(__dirname, 'floating.html'));
 
-  floatingWindow.on('moved', saveFloatingPosition);
+  // 位置保存时机：拖拽结束 + 窗口关闭（展开/收起时的程序性位移不落盘）
   floatingWindow.on('close', saveFloatingPosition);
   floatingWindow.on('closed', () => {
     floatingWindow = null;
@@ -181,6 +189,35 @@ ipcMain.on('floating-set-expanded', (_e, expanded) => {
   const nx = Math.min(Math.max(x + w - size.width, a.x), a.x + a.width - size.width);
   const ny = Math.min(Math.max(y + h - size.height, a.y), a.y + a.height - size.height);
   floatingWindow.setBounds({ x: nx, y: ny, width: size.width, height: size.height });
+});
+
+/* 浮动窗拖拽换位：主进程以固定频率轮询光标位置移动窗口。
+ * 不能用渲染层上报的 screenX——高分屏缩放下它与 setPosition 坐标系不一致，窗口会漂移 */
+let floatingDragTimer = null;
+let floatingDragAnchor = null;
+
+ipcMain.on('floating-drag-start', () => {
+  if (!floatingWindow || floatingDragTimer) return;
+  const cursor = screen.getCursorScreenPoint();
+  const [wx, wy] = floatingWindow.getPosition();
+  floatingDragAnchor = { cursorX: cursor.x, cursorY: cursor.y, winX: wx, winY: wy };
+  floatingDragTimer = setInterval(() => {
+    if (!floatingWindow || !floatingDragAnchor) return;
+    const p = screen.getCursorScreenPoint();
+    floatingWindow.setPosition(
+      floatingDragAnchor.winX + Math.round(p.x - floatingDragAnchor.cursorX),
+      floatingDragAnchor.winY + Math.round(p.y - floatingDragAnchor.cursorY),
+    );
+  }, 16);
+});
+
+ipcMain.on('floating-drag-end', () => {
+  if (floatingDragTimer) {
+    clearInterval(floatingDragTimer);
+    floatingDragTimer = null;
+  }
+  floatingDragAnchor = null;
+  saveFloatingPosition();
 });
 
 app.whenReady().then(() => {

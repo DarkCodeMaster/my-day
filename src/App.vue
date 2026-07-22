@@ -71,6 +71,9 @@ const tabItems = [
 
       <img src="/sun.png" alt="" class="corner-sun" aria-hidden="true" />
 
+      <!-- 自定义标题栏拖拽区：顶部 40px 与 titleBarOverlay 同高，双击可切换最大化 -->
+      <div class="titlebar-drag" aria-hidden="true"></div>
+
       <div class="page">
         <header class="page-header">
           <div class="page-header-left">
@@ -179,9 +182,22 @@ const tabItems = [
   overflow: auto;
 }
 
+/* 自定义标题栏拖拽区：与 titleBarOverlay（40px）同高；
+   z-index 低于吸附导航（89），导航吸附后依然可点 */
+.titlebar-drag {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
+  -webkit-app-region: drag;
+  z-index: 50;
+}
+
 .corner-sun {
   position: fixed;
-  top: -120px;
+  /* 整个太阳置于 40px 自定义标题栏下方（留 8px 间隙），彻底避开窗口控制按钮 */
+  top: 48px;
   right: -120px;
   width: 360px;
   height: auto;

@@ -18,15 +18,17 @@
     justify-content: center;
     width: 100vw;
     height: 100vh;
-    cursor: pointer;
-    -webkit-app-region: drag; /* 空白处按住可拖动换位 */
+    /* 整面可拖（脚本里 pointer 拖拽）+ 点按展开，二者共存 */
+    cursor: grab;
+    touch-action: none;
   }
+  #collapsed:active { cursor: grabbing; }
   #collapsed img {
     width: 56px;
     height: 56px;
     filter: drop-shadow(0 3px 6px rgba(121, 79, 39, 0.35));
     transition: transform 0.15s ease;
-    -webkit-app-region: no-drag; /* 点击图片是展开，不是拖动 */
+    pointer-events: none; /* 事件统一由 #collapsed 处理 */
   }
   #collapsed:hover img { transform: scale(1.12) rotate(8deg); }
 
@@ -139,8 +141,6 @@
 // 窗口尺寸变换由主进程做，这里只换 body class 并告诉主进程目标状态。
 const body = document.body;
 const text = document.getElementById('text');
-let downX = 0;
-let downY = 0;
 
 function expand() {
   body.classList.add('expanded');
@@ -170,14 +170,46 @@ function save() {
 }
 
 const collapsedEl = document.getElementById('collapsed');
-collapsedEl.addEventListener('mousedown', (e) => {
-  downX = e.screenX;
-  downY = e.screenY;
+// 点按 vs 拖动共存：按下后位移超 5px 进入拖动（IPC 移动窗口），否则视为点击展开
+let pressing = false;
+let dragging = false;
+let pressX = 0;
+let pressY = 0;
+
+collapsedEl.addEventListener('pointerdown', (e) => {
+  pressing = true;
+  dragging = false;
+  pressX = e.screenX;
+  pressY = e.screenY;
+  collapsedEl.setPointerCapture(e.pointerId); // 拖出窗口也能持续接收事件
 });
-collapsedEl.addEventListener('click', (e) => {
-  // 拖动换位不触发展开（松开时位移超过阈值视为拖动）
-  if (Math.abs(e.screenX - downX) + Math.abs(e.screenY - downY) > 6) return;
-  expand();
+
+collapsedEl.addEventListener('pointermove', (e) => {
+  if (!pressing) return;
+  // 位移超阈值才进入拖动：主进程开始轮询光标移动窗口（不依赖本层坐标系）
+  if (!dragging && Math.abs(e.screenX - pressX) + Math.abs(e.screenY - pressY) > 5) {
+    dragging = true;
+    window.floatingAPI.dragStart();
+  }
+});
+
+collapsedEl.addEventListener('pointerup', () => {
+  if (!pressing) return;
+  pressing = false;
+  if (dragging) {
+    dragging = false;
+    window.floatingAPI.dragEnd();
+  } else {
+    expand();
+  }
+});
+
+collapsedEl.addEventListener('pointercancel', () => {
+  pressing = false;
+  if (dragging) {
+    dragging = false;
+    window.floatingAPI.dragEnd();
+  }
 });
 
 document.getElementById('save').addEventListener('click', save);
