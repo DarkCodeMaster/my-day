@@ -84,6 +84,15 @@
     outline: none;
   }
   #text:focus { border-color: #19c8b9; }
+  /* 滚动条与主应用同款：轨道透明、半透明米棕滑块 */
+  #text::-webkit-scrollbar { width: 8px; }
+  #text::-webkit-scrollbar-track { background: transparent; }
+  #text::-webkit-scrollbar-thumb {
+    background: rgba(168, 152, 120, 0.45);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
 
   #expanded .actions { display: flex; justify-content: flex-end; gap: 8px; }
   #expanded .actions button {

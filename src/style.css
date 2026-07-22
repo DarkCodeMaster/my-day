@@ -57,6 +57,36 @@ body {
   line-height: 1.6;
 }
 
+/* ==================== 全局滚动条 ====================
+ * 纤细圆润、轨道全透明、半透明米棕滑块，贴合动森配色。
+ * Firefox 用 scrollbar-*，Chromium/WebKit 用 ::-webkit-scrollbar。 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(168, 152, 120, 0.45) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(168, 152, 120, 0.45);
+  border-radius: 999px;
+  /* 2px 透明描边让滑块视觉更细，并露出底部轨道 */
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(168, 152, 120, 0.8);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 /* 覆盖 animal-island-vue 基础 token，使 100% 缩放接近原先 110% 的观感 */
 :root {
   --animal-font-size-sm: 13px;
@@ -410,16 +440,6 @@ body {
 .animal-select__dropdown {
   max-height: 320px !important;
   overflow-y: auto !important;
-}
-.animal-select__dropdown::-webkit-scrollbar {
-  width: 6px;
-}
-.animal-select__dropdown::-webkit-scrollbar-thumb {
-  background: rgba(114, 93, 66, 0.25);
-  border-radius: 10px;
-}
-.animal-select__dropdown::-webkit-scrollbar-track {
-  background: transparent;
 }
 
 

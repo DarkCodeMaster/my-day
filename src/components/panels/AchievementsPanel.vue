@@ -11,14 +11,17 @@ import type { ArchivedTask } from '@/types';
 const { archivedTasks } = useMyDayStorage();
 const { list, stats, unlockedCount, totalCount } = useAchievements();
 
-const MODULE_ORDER: AchievementModule[] = ['task', 'study', 'money', 'health', 'inspiration', 'meta'];
+// 分组顺序与顶部 Tab 页一致（动态/成就/备份无成就，收藏家兜底在最后）
+const MODULE_ORDER: AchievementModule[] = ['task', 'health', 'study', 'money', 'inspiration', 'meta'];
 
-/** 奖杯墙按模块分组 */
+/** 奖杯墙按模块分组，组内按稀有度铜→银→金→白金排序 */
 const grouped = computed(() =>
   MODULE_ORDER.map((m) => ({
     module: m,
     label: ACHIEVEMENT_MODULE_LABELS[m],
-    items: list.value.filter((a) => a.module === m),
+    items: list.value
+      .filter((a) => a.module === m)
+      .sort((a, b) => TIER_ORDER.indexOf(a.tier) - TIER_ORDER.indexOf(b.tier)),
   })),
 );
 

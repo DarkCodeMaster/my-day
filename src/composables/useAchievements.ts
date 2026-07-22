@@ -99,7 +99,9 @@ const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'study-book-1', module: 'study', name: '开卷有益', emoji: '📖', tier: 'bronze', description: '读完 1 本书', check: (s) => s.studyBooksCompleted >= 1, progress: countProgress(1, (s) => s.studyBooksCompleted) },
   { id: 'study-video-1', module: 'study', name: '网课先锋', emoji: '🎬', tier: 'bronze', description: '看完 1 套视频课程', check: (s) => s.studyVideosCompleted >= 1, progress: countProgress(1, (s) => s.studyVideosCompleted) },
   { id: 'study-5', module: 'study', name: '学富五车', emoji: '📚', tier: 'silver', description: '学完 5 个学习项目', check: (s) => s.studyCompleted >= 5, progress: countProgress(5, (s) => s.studyCompleted) },
+  { id: 'study-books-5', module: 'study', name: '藏书家', emoji: '🗄️', tier: 'silver', description: '读完 5 本书', check: (s) => s.studyBooksCompleted >= 5, progress: countProgress(5, (s) => s.studyBooksCompleted) },
   { id: 'study-10', module: 'study', name: '学无止境', emoji: '🏫', tier: 'gold', description: '学完 10 个学习项目', check: (s) => s.studyCompleted >= 10, progress: countProgress(10, (s) => s.studyCompleted) },
+  { id: 'study-20', module: 'study', name: '学海无涯', emoji: '🌊', tier: 'platinum', description: '学完 20 个学习项目', check: (s) => s.studyCompleted >= 20, progress: countProgress(20, (s) => s.studyCompleted) },
   // ---- 赚钱 ----
   { id: 'money-first', module: 'money', name: '初战告捷', emoji: '💵', tier: 'bronze', description: '完成 1 个赚钱任务', check: (s) => s.moneyDoneCount >= 1, progress: countProgress(1, (s) => s.moneyDoneCount) },
   { id: 'money-100', module: 'money', name: '第一桶金', emoji: '💰', tier: 'bronze', description: '累计赚得 100 元', check: (s) => s.moneyEarnedTotal >= 100, progress: countProgress(100, (s) => s.moneyEarnedTotal) },
@@ -112,12 +114,16 @@ const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'weight-7', module: 'health', name: '健康打卡', emoji: '⚖️', tier: 'bronze', description: '记录体重满 7 天', check: (s) => s.weightDays >= 7, progress: countProgress(7, (s) => s.weightDays) },
   { id: 'weight-30', module: 'health', name: '持之以恒', emoji: '🏃', tier: 'silver', description: '记录体重满 30 天', check: (s) => s.weightDays >= 30, progress: countProgress(30, (s) => s.weightDays) },
   { id: 'weight-streak-7', module: 'health', name: '自律达人', emoji: '💪', tier: 'silver', description: '连续 7 天记录体重', check: (s) => s.maxWeightStreak >= 7, progress: countProgress(7, (s) => s.maxWeightStreak) },
+  { id: 'weight-60', module: 'health', name: '健康习惯', emoji: '🍏', tier: 'gold', description: '记录体重满 60 天', check: (s) => s.weightDays >= 60, progress: countProgress(60, (s) => s.weightDays) },
   { id: 'weight-streak-30', module: 'health', name: '钢铁意志', emoji: '🎖️', tier: 'gold', description: '连续 30 天记录体重', check: (s) => s.maxWeightStreak >= 30, progress: countProgress(30, (s) => s.maxWeightStreak) },
+  { id: 'weight-100', module: 'health', name: '百日筑基', emoji: '🏔️', tier: 'platinum', description: '记录体重满 100 天', check: (s) => s.weightDays >= 100, progress: countProgress(100, (s) => s.weightDays) },
   // ---- 灵感 ----
   { id: 'inspiration-first', module: 'inspiration', name: '灵感初现', emoji: '✨', tier: 'bronze', description: '记录第 1 条灵感', check: (s) => s.inspirationCount >= 1, progress: countProgress(1, (s) => s.inspirationCount) },
   { id: 'inspiration-10', module: 'inspiration', name: '灵光一闪', emoji: '💡', tier: 'bronze', description: '记录 10 条灵感', check: (s) => s.inspirationCount >= 10, progress: countProgress(10, (s) => s.inspirationCount) },
+  { id: 'inspiration-25', module: 'inspiration', name: '奇思妙想', emoji: '🎈', tier: 'silver', description: '记录 25 条灵感', check: (s) => s.inspirationCount >= 25, progress: countProgress(25, (s) => s.inspirationCount) },
   { id: 'inspiration-50', module: 'inspiration', name: '点子王', emoji: '🌟', tier: 'silver', description: '记录 50 条灵感', check: (s) => s.inspirationCount >= 50, progress: countProgress(50, (s) => s.inspirationCount) },
   { id: 'inspiration-100', module: 'inspiration', name: '思想巨匠', emoji: '🧠', tier: 'gold', description: '记录 100 条灵感', check: (s) => s.inspirationCount >= 100, progress: countProgress(100, (s) => s.inspirationCount) },
+  { id: 'inspiration-200', module: 'inspiration', name: '灵感火山', emoji: '🌋', tier: 'platinum', description: '记录 200 条灵感', check: (s) => s.inspirationCount >= 200, progress: countProgress(200, (s) => s.inspirationCount) },
   // ---- 收藏家（元成就：统计其他成就的解锁数） ----
   { id: 'meta-5', module: 'meta', name: '小收藏家', emoji: '🏵️', tier: 'bronze', description: '解锁 5 个成就', check: (_s, u) => u >= 5, progress: (_s, u) => ({ current: Math.min(u, 5), target: 5 }) },
   { id: 'meta-15', module: 'meta', name: '收藏大师', emoji: '🏅', tier: 'silver', description: '解锁 15 个成就', check: (_s, u) => u >= 15, progress: (_s, u) => ({ current: Math.min(u, 15), target: 15 }) },

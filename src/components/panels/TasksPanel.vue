@@ -885,13 +885,6 @@ onBeforeUnmount(disposeTaskChart);
   overflow-y: auto;
   padding-right: 4px;
 }
-.kanban-column-body::-webkit-scrollbar {
-  width: 6px;
-}
-.kanban-column-body::-webkit-scrollbar-thumb {
-  background: #d9cbaa;
-  border-radius: 3px;
-}
 .kanban-card {
   background: #fffdf5;
   border: 2px solid #e8dcc8;
