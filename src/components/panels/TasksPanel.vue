@@ -428,16 +428,20 @@ onBeforeUnmount(disposeTaskChart);
 
 <template>
   <div class="section">
-    <div class="section-head">
-      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
-        <Title color="app-yellow" size="middle">任务看板</Title>
-        <CustomSelect v-model="activeBoardId" :options="boardOptions" />
-        <Button type="text" size="small" @click="boardManagerOpen = true">📋 管理</Button>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-        <Button type="text" size="small" @click="cardDisplayOpen = true">🎛 卡片</Button>
-        <Button type="text" size="small" @click="columnSettingsOpen = true">⚙️ 列设置</Button>
-        <Button type="primary" size="middle" @click="openTaskModal">新建任务</Button>
+    <div class="section-head" style="flex-direction:column;align-items:stretch;">
+      <Title color="app-yellow" size="middle">任务看板</Title>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="width:200px;">
+            <CustomSelect v-model="activeBoardId" :options="boardOptions" />
+          </div>
+          <Button type="text" size="small" @click="boardManagerOpen = true">📋 管理</Button>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <Button type="text" size="small" @click="cardDisplayOpen = true">🎛 卡片</Button>
+          <Button type="text" size="small" @click="columnSettingsOpen = true">⚙️ 列设置</Button>
+          <Button type="primary" size="middle" @click="openTaskModal">新建任务</Button>
+        </div>
       </div>
     </div>
     <div class="kanban-board">
