@@ -92,6 +92,16 @@ body {
   flex-direction: column;
 }
 
+/* 竖屏/窄屏：缩小页面边距，展示更多内容 */
+@media (max-width: 1200px) {
+  .page { padding: 60px 60px; }
+}
+@media (max-width: 900px), (orientation: portrait) {
+  .page { padding: 32px 20px; }
+  .page-header { margin-bottom: 18px; }
+  .grass-banner { margin-bottom: 18px; }
+}
+
 .page-header {
   display: flex;
   align-items: center;

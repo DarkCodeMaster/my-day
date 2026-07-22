@@ -481,6 +481,17 @@ onBeforeUnmount(disposeTaskChart);
   height: calc(100vh - 320px);
   min-height: 420px;
 }
+/* 竖屏/窄屏：改为两列排列，每列固定较矮高度，列内滚动 */
+@media (max-width: 900px), (orientation: portrait) {
+  .kanban-board {
+    grid-template-columns: repeat(2, 1fr);
+    height: auto;
+    min-height: 0;
+  }
+  .kanban-column {
+    height: 500px;
+  }
+}
 .kanban-column {
   display: flex;
   flex-direction: column;
