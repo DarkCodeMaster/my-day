@@ -101,7 +101,8 @@ const submitTask = () => {
     task.linkId = linkId;
   } else {
     const status: TaskItem['status'] = deadline && isDeadlineWithinDays(deadline, 3) ? 'today' : 'todo';
-    tasks.push({
+    // 数组顺序即看板列内显示顺序，新任务插入到数组头部，显示在列顶部
+    tasks.unshift({
       id: Date.now(),
       title,
       description: taskForm.description,

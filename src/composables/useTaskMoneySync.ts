@@ -12,7 +12,8 @@ export function useTaskMoneySync() {
       (t: TaskItem) => t.linkType === 'money' && t.linkId === money.id
     );
     if (exists) return;
-    tasks.push({
+    // 数组顺序即看板列内显示顺序，自动任务也插入到列顶部
+    tasks.unshift({
       id: Date.now(),
       title: `[赚钱] ${money.desc}`,
       deadline: money.deadline,
@@ -33,7 +34,7 @@ export function useTaskMoneySync() {
         existing.deadline = money.deadline;
         if (existing.status !== 'today') existing.status = 'today';
       } else {
-        tasks.push({
+        tasks.unshift({
           id: Date.now(),
           title: `[赚钱] ${money.desc}`,
           deadline: money.deadline,
