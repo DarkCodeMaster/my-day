@@ -57,6 +57,25 @@ export interface TaskItem {
   linkId?: number;
 }
 
+/** 归档任务：从看板完成列移入成就页历史，快照看板名（看板后可被改名/删除） */
+export interface ArchivedTask {
+  id: number;
+  title: string;
+  /** 描述富文本（归档快照，展示时消毒） */
+  description?: string;
+  deadline?: string;
+  boardId: string;
+  /** 归档时的看板名快照 */
+  boardName: string;
+  /** 完成时间 ISO（遗留任务可能缺失，展示/统计回退 archivedAt） */
+  completedAt?: string;
+  /** 归档时间 ISO */
+  archivedAt: string;
+  /** 仅作展示信息，不再可跳转 */
+  linkType?: 'study' | 'money' | null;
+  linkId?: number;
+}
+
 export type KanbanColorKey =
   | 'red' | 'yellow' | 'blue' | 'green'
   | 'pink' | 'teal' | 'purple' | 'orange';
@@ -98,4 +117,7 @@ export interface MyDayState {
   boards: KanbanBoard[];
   activeBoardId: string;
   cardDisplay: CardDisplayConfig;
+  archivedTasks: ArchivedTask[];
+  /** 成就 id -> 解锁时间 ISO（只持久化解锁状态，统计全部派生） */
+  unlockedAchievements: Record<string, string>;
 }

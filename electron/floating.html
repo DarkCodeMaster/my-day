@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:" />
+<title>速记灵感</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { background: transparent; overflow: hidden; user-select: none; }
+  body {
+    font-family: "Nunito", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+
+  /* ---------- 收起态：小太阳 ---------- */
+  #collapsed {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100vw;
+    height: 100vh;
+    cursor: pointer;
+    -webkit-app-region: drag; /* 空白处按住可拖动换位 */
+  }
+  #collapsed img {
+    width: 56px;
+    height: 56px;
+    filter: drop-shadow(0 3px 6px rgba(121, 79, 39, 0.35));
+    transition: transform 0.15s ease;
+    -webkit-app-region: no-drag; /* 点击图片是展开，不是拖动 */
+  }
+  #collapsed:hover img { transform: scale(1.12) rotate(8deg); }
+
+  /* ---------- 展开态：输入卡片 ---------- */
+  #expanded {
+    display: none;
+    flex-direction: column;
+    gap: 10px;
+    width: 100vw;
+    height: 100vh;
+    padding: 14px;
+    background: #f7f3df;
+    border: 2px solid #c4b89e;
+    border-radius: 18px;
+    box-shadow: 0 8px 24px rgba(61, 52, 40, 0.25);
+  }
+  body.expanded #collapsed { display: none; }
+  body.expanded #expanded { display: flex; }
+
+  #expanded .head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #794f27;
+    font-size: 14px;
+    font-weight: 800;
+  }
+  #expanded .head img { width: 20px; height: 20px; }
+  #expanded .close {
+    margin-left: auto;
+    border: none;
+    background: transparent;
+    color: #8a7b66;
+    font-size: 16px;
+    cursor: pointer;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    line-height: 1;
+  }
+  #expanded .close:hover { background: rgba(114, 93, 66, 0.12); color: #794f27; }
+
+  #text {
+    flex: 1;
+    resize: none;
+    border: 2px solid #c4b89e;
+    border-radius: 12px;
+    background: #fffdf6;
+    padding: 8px 10px;
+    font-size: 14px;
+    font-family: inherit;
+    color: #725d42;
+    outline: none;
+  }
+  #text:focus { border-color: #19c8b9; }
+
+  #expanded .actions { display: flex; justify-content: flex-end; gap: 8px; }
+  #expanded .actions button {
+    border: none;
+    border-radius: 50px;
+    padding: 6px 16px;
+    font-size: 13px;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  #save { background: #19c8b9; color: #fff; }
+  #save:hover { background: #14b3a5; }
+  #cancel { background: transparent; color: #8a7b66; }
+  #cancel:hover { background: rgba(114, 93, 66, 0.1); }
+
+  /* 保存成功短暂提示 */
+  #saved-tip {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(247, 243, 223, 0.92);
+    border-radius: 18px;
+    color: #5a9e1e;
+    font-size: 15px;
+    font-weight: 800;
+  }
+  body.saved #saved-tip { display: flex; }
+</style>
+</head>
+<body>
+  <div id="collapsed" title="点击速记灵感，按住拖动换位">
+    <img id="sun" src="./sun.png" alt="速记灵感" />
+  </div>
+
+  <div id="expanded">
+    <div class="head">
+      <img src="./sun.png" alt="" />
+      突然想到什么？
+      <button id="close" title="收起 (Esc)">✕</button>
+    </div>
+    <textarea id="text" placeholder="记录一闪而过的灵感… (Ctrl+Enter 保存)" autofocus></textarea>
+    <div class="actions">
+      <button id="cancel">取消</button>
+      <button id="save">🌿 记录</button>
+    </div>
+  </div>
+
+  <div id="saved-tip">🌿 灵感已记录！</div>
+
+<script>
+// 浮动窗渲染脚本：收起（小太阳）/ 展开（输入卡片）两态切换。
+// 窗口尺寸变换由主进程做，这里只换 body class 并告诉主进程目标状态。
+const body = document.body;
+const text = document.getElementById('text');
+let downX = 0;
+let downY = 0;
+
+function expand() {
+  body.classList.add('expanded');
+  window.floatingAPI.setExpanded(true);
+  // 等窗口尺寸切换后再聚焦
+  setTimeout(() => text.focus(), 120);
+}
+
+function collapse() {
+  text.value = '';
+  body.classList.remove('expanded');
+  window.floatingAPI.setExpanded(false);
+}
+
+function save() {
+  const value = text.value.trim();
+  if (!value) {
+    collapse();
+    return;
+  }
+  window.floatingAPI.sendInspiration(value);
+  body.classList.add('saved');
+  setTimeout(() => {
+    body.classList.remove('saved');
+    collapse();
+  }, 650);
+}
+
+const collapsedEl = document.getElementById('collapsed');
+collapsedEl.addEventListener('mousedown', (e) => {
+  downX = e.screenX;
+  downY = e.screenY;
+});
+collapsedEl.addEventListener('click', (e) => {
+  // 拖动换位不触发展开（松开时位移超过阈值视为拖动）
+  if (Math.abs(e.screenX - downX) + Math.abs(e.screenY - downY) > 6) return;
+  expand();
+});
+
+document.getElementById('save').addEventListener('click', save);
+document.getElementById('cancel').addEventListener('click', collapse);
+document.getElementById('close').addEventListener('click', collapse);
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') collapse();
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) save();
+});
+
+// 展开状态下失焦自动收起（不保存），保持桌面挂件感
+window.addEventListener('blur', () => {
+  if (body.classList.contains('expanded') && !body.classList.contains('saved')) {
+    collapse();
+  }
+});
+</script>
+</body>
+</html>

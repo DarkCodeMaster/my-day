@@ -1,10 +1,10 @@
 import { ref, reactive, watch, onMounted } from 'vue';
-import type { MyDayState, WeightRecord, StudyItem, MoneyItem, TodayLog, TaskItem, InspirationItem, KanbanBoard, KanbanColumn, CardDisplayConfig } from '@/types';
+import type { MyDayState, WeightRecord, StudyItem, MoneyItem, TodayLog, TaskItem, InspirationItem, KanbanBoard, KanbanColumn, CardDisplayConfig, ArchivedTask } from '@/types';
 import { todayStr } from '@/utils/date';
 import { createDefaultColumns } from '@/utils/task';
 
 const STORAGE_KEY = 'myday';
-const CURRENT_VERSION = 4;
+const CURRENT_VERSION = 5;
 
 const SAMPLE_LOG_CONTENTS = new Set([
   '晨间体重 67.0 kg，比昨天 -0.3 kg 🎉',
@@ -110,6 +110,13 @@ export function migrateMyDayState(data: any): MyDayState {
     return { ...t, boardId, status };
   });
 
+  // v5：成就系统（归档任务 + 解锁状态）
+  const archivedTasks: ArchivedTask[] = Array.isArray(data.archivedTasks) ? data.archivedTasks : [];
+  const unlockedAchievements: Record<string, string> =
+    data.unlockedAchievements && typeof data.unlockedAchievements === 'object' && !Array.isArray(data.unlockedAchievements)
+      ? data.unlockedAchievements
+      : {};
+
   return {
     version: CURRENT_VERSION,
     activeTab: data.activeTab || 'health',
@@ -127,6 +134,8 @@ export function migrateMyDayState(data: any): MyDayState {
     boards,
     activeBoardId,
     cardDisplay,
+    archivedTasks,
+    unlockedAchievements,
   };
 }
 
@@ -147,6 +156,8 @@ const moneyPlan = ref('');
 const boards = reactive<KanbanBoard[]>([]);
 const activeBoardId = ref('default');
 const cardDisplay = reactive<CardDisplayConfig>({ description: true, deadline: true, link: true });
+const archivedTasks = reactive<ArchivedTask[]>([]);
+const unlockedAchievements = reactive<Record<string, string>>({});
 const isLoaded = ref(false);
 
 const saveState = () => {
@@ -166,6 +177,8 @@ const saveState = () => {
       boards: [...boards],
       activeBoardId: activeBoardId.value,
       cardDisplay: { ...cardDisplay },
+      archivedTasks: [...archivedTasks],
+      unlockedAchievements: { ...unlockedAchievements },
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (e) {
@@ -183,6 +196,8 @@ watch(tasks, saveState, { deep: true });
 watch(inspirations, saveState, { deep: true });
 watch(boards, saveState, { deep: true });
 watch(cardDisplay, saveState, { deep: true });
+watch(archivedTasks, saveState, { deep: true });
+watch(unlockedAchievements, saveState, { deep: true });
 watch(moneyPlan, saveState);
 
 let loadAttempted = false;
@@ -214,6 +229,9 @@ function ensureLoaded() {
       cardDisplay.description = saved.cardDisplay.description;
       cardDisplay.deadline = saved.cardDisplay.deadline;
       cardDisplay.link = saved.cardDisplay.link;
+      archivedTasks.splice(0, archivedTasks.length, ...saved.archivedTasks);
+      Object.keys(unlockedAchievements).forEach((k) => delete unlockedAchievements[k]);
+      Object.assign(unlockedAchievements, saved.unlockedAchievements);
     }
   } catch (e) {
     console.warn('Failed to load MyDay data:', e);
@@ -240,6 +258,8 @@ export function useMyDayStorage() {
     boards,
     activeBoardId,
     cardDisplay,
+    archivedTasks,
+    unlockedAchievements,
     isLoaded,
     saveState,
   };

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch, nextTick, onBeforeUnmount } from 'vue';
-import { Button, Input, Title, Modal } from 'animal-island-vue';
+import { Button, Input, Title, Modal, Notification } from 'animal-island-vue';
 import { QuillEditor } from '@vueup/vue-quill';
 import { init } from '@/lib/echarts';
 import { useMyDayStorage } from '@/composables/useMyDayStorage';
@@ -21,7 +21,7 @@ import type { StudyItem, MoneyItem, TaskItem, KanbanColumn } from '@/types';
 import CustomSelect from '@/components/CustomSelect.vue';
 import DatePickerModal from '@/components/DatePickerModal.vue';
 
-const { tasks, studyItems, moneyItems, boards, activeBoardId, cardDisplay } = useMyDayStorage();
+const { tasks, studyItems, moneyItems, boards, activeBoardId, cardDisplay, archivedTasks } = useMyDayStorage();
 const { openDetail, openMoneyDetail } = useDetailDrawers();
 
 /* ---------- 当前看板与列 ---------- */
@@ -314,6 +314,42 @@ const handleCardDrop = (target: TaskItem, e: DragEvent) => {
   clearDragState();
 };
 
+/* ---------- 归档已完成任务 ---------- */
+const archiveConfirmOpen = ref(false);
+/** 当前看板完成列里的任务（isDoneColumn 基于当前看板列，安全） */
+const archivableTasks = computed(() =>
+  tasks.filter((t: TaskItem) => t.boardId === activeBoardId.value && isDoneColumn(t.status))
+);
+
+/** 归档：快照移入成就页历史（含看板名），再从看板移除；完成记录仍计入成就统计 */
+const confirmArchive = () => {
+  const targets = archivableTasks.value;
+  if (targets.length) {
+    const boardName = activeBoard.value?.name ?? '';
+    const now = new Date().toISOString();
+    targets.forEach((t) => {
+      archivedTasks.push({
+        id: t.id,
+        title: t.title,
+        description: t.description,
+        deadline: t.deadline,
+        boardId: t.boardId,
+        boardName,
+        completedAt: t.completedAt, // 遗留任务可能缺失，展示/统计回退 archivedAt
+        archivedAt: now,
+        linkType: t.linkType,
+        linkId: t.linkId,
+      });
+    });
+    const ids = new Set(targets.map((t) => t.id));
+    for (let i = tasks.length - 1; i >= 0; i--) {
+      if (ids.has(tasks[i].id)) tasks.splice(i, 1);
+    }
+    Notification.success(`已归档 ${targets.length} 个任务`);
+  }
+  archiveConfirmOpen.value = false;
+};
+
 /* ---------- 时段分布图 ---------- */
 const taskPeriods = [
   { key: 'dawn', label: '凌晨', start: 0, end: 6, color: '#889df0' },
@@ -461,6 +497,13 @@ onBeforeUnmount(disposeTaskChart);
             size="small"
             @click="taskChartOpen = true"
           >📊 时段</Button>
+          <Button
+            v-if="col.isDone"
+            type="text"
+            size="small"
+            :disabled="archivableTasks.length === 0"
+            @click="archiveConfirmOpen = true"
+          >📦 归档</Button>
           <span class="kanban-column-count">{{ tasks.filter((t: TaskItem) => t.boardId === activeBoardId && t.status === col.id).length }}</span>
         </div>
         <div class="kanban-column-body">
@@ -718,6 +761,17 @@ onBeforeUnmount(disposeTaskChart);
           确定要删除看板「{{ boardDeleteTarget.name }}」吗？
         </template>
       </template>
+    </Modal>
+
+    <!-- 归档确认 -->
+    <Modal
+      v-model:open="archiveConfirmOpen"
+      title="归档已完成任务"
+      :typewriter="false"
+      @ok="confirmArchive"
+    >
+      将把当前看板完成列的 {{ archivableTasks.length }} 个任务移入「成就」页的历史归档，
+      移出后不再显示在看板上（完成记录仍会计入成就统计）。确定归档吗？
     </Modal>
 
     <!-- 卡片显示设置 -->

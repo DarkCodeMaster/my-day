@@ -15,18 +15,26 @@ import {
   NotificationContainer,
 } from 'animal-island-vue';
 import { useMyDayStorage } from '@/composables/useMyDayStorage';
+import { useAchievements } from '@/composables/useAchievements';
+import { useQuickInspiration } from '@/composables/useQuickInspiration';
 import DetailDrawers from '@/components/DetailDrawers.vue';
 import DeleteConfirmModal from '@/components/DeleteConfirmModal.vue';
 import InspirationComposer from '@/components/InspirationComposer.vue';
+import CelebrationOverlay from '@/components/CelebrationOverlay.vue';
 import TasksPanel from '@/components/panels/TasksPanel.vue';
 import HealthPanel from '@/components/panels/HealthPanel.vue';
 import StudyPanel from '@/components/panels/StudyPanel.vue';
 import MoneyPanel from '@/components/panels/MoneyPanel.vue';
 import TodayPanel from '@/components/panels/TodayPanel.vue';
 import InspirationPanel from '@/components/panels/InspirationPanel.vue';
+import AchievementsPanel from '@/components/panels/AchievementsPanel.vue';
 import BackupPanel from '@/components/panels/BackupPanel.vue';
 
 const { activeTab, isLoaded } = useMyDayStorage();
+// 成就引擎全局常驻（与激活 Tab 无关）：数据变化实时检测解锁
+useAchievements();
+// 桌面浮动窗速记的灵感接收监听（浏览器环境无 electronAPI，自动跳过）
+useQuickInspiration();
 
 const welcomeTrigger = ref(0);
 onMounted(() => {
@@ -40,6 +48,7 @@ const tabItems = [
   { key: 'money', label: '赚钱' },
   { key: 'today', label: '动态' },
   { key: 'inspiration', label: '灵感' },
+  { key: 'achievements', label: '成就' },
   { key: 'import-export', label: '备份' },
 ];
 </script>
@@ -99,6 +108,9 @@ const tabItems = [
             <template #inspiration>
               <InspirationPanel />
             </template>
+            <template #achievements>
+              <AchievementsPanel />
+            </template>
             <template #import-export>
               <BackupPanel />
             </template>
@@ -114,6 +126,7 @@ const tabItems = [
               <li><b>赚钱</b>：管理任务和收入状态。</li>
               <li><b>动态</b>：回顾一天的时间线。</li>
               <li><b>灵感</b>：查看所有记录的灵感。</li>
+              <li><b>成就</b>：奖杯墙展示成就进度，并保留看板归档的任务历史。</li>
               <li><b>备份</b>：备份和恢复本地数据。</li>
             </ul>
           </Collapse>
@@ -128,6 +141,7 @@ const tabItems = [
     </div>
     <NotificationContainer />
     <InspirationComposer />
+    <CelebrationOverlay />
   </Cursor>
 </template>
 

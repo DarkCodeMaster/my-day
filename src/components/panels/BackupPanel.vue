@@ -18,6 +18,8 @@ const {
   boards,
   activeBoardId,
   cardDisplay,
+  archivedTasks,
+  unlockedAchievements,
   saveState,
 } = useMyDayStorage();
 
@@ -93,7 +95,7 @@ const validateImportData = (data: any): { valid: false; error: string } | { vali
     return { valid: false, error: 'version 不能小于 1' };
   }
 
-  const arrayFields = ['weights', 'studyItems', 'moneyItems', 'todayLogs', 'tasks', 'inspirations', 'boards'];
+  const arrayFields = ['weights', 'studyItems', 'moneyItems', 'todayLogs', 'tasks', 'inspirations', 'boards', 'archivedTasks'];
   for (const key of arrayFields) {
     if (data[key] != null && !Array.isArray(data[key])) {
       return { valid: false, error: `${key} 必须是数组` };
@@ -117,6 +119,9 @@ const validateImportData = (data: any): { valid: false; error: string } | { vali
   }
   if (data.cardDisplay != null && typeof data.cardDisplay !== 'object') {
     return { valid: false, error: 'cardDisplay 必须是对象' };
+  }
+  if (data.unlockedAchievements != null && (typeof data.unlockedAchievements !== 'object' || Array.isArray(data.unlockedAchievements))) {
+    return { valid: false, error: 'unlockedAchievements 必须是对象' };
   }
 
   return { valid: true, data };
@@ -167,6 +172,9 @@ const executeImport = () => {
     cardDisplay.description = migrated.cardDisplay.description;
     cardDisplay.deadline = migrated.cardDisplay.deadline;
     cardDisplay.link = migrated.cardDisplay.link;
+    archivedTasks.splice(0, archivedTasks.length, ...migrated.archivedTasks);
+    Object.keys(unlockedAchievements).forEach((k) => delete unlockedAchievements[k]);
+    Object.assign(unlockedAchievements, migrated.unlockedAchievements);
 
     importJson.value = '';
     importConfirmModalOpen.value = false;
@@ -190,6 +198,8 @@ const executeClearAll = () => {
   cardDisplay.description = true;
   cardDisplay.deadline = true;
   cardDisplay.link = true;
+  archivedTasks.splice(0, archivedTasks.length);
+  Object.keys(unlockedAchievements).forEach((k) => delete unlockedAchievements[k]);
   clearAllModalOpen.value = false;
   saveState();
   Notification.success('已清空所有数据');
